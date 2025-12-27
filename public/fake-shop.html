@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mitvegyek.ai – Demo Webshop</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .header {
+      background: #111827;
+      color: white;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header-logo {
+      font-weight: 700;
+      font-size: 18px;
+    }
+
+    .header-nav {
+      display: flex;
+      gap: 16px;
+      font-size: 14px;
+    }
+
+    .header-nav a {
+      color: #e5e7eb;
+      text-decoration: none;
+    }
+
+    .header-nav a:hover {
+      color: white;
+    }
+
+    .hero {
+      padding: 32px;
+      background: linear-gradient(135deg, #111827, #1f2937);
+      color: white;
+    }
+
+    .hero h1 {
+      margin: 0 0 12px 0;
+      font-size: 28px;
+    }
+
+    .hero p {
+      margin: 0 0 12px 0;
+      max-width: 600px;
+      font-size: 15px;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(15, 118, 110, 0.2);
+      color: #a7f3d0;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+
+    .hero-note {
+      font-size: 12px;
+      opacity: 0.9;
+    }
+
+    .content {
+      padding: 24px 32px 80px;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .section-subtitle {
+      font-size: 13px;
+      color: #4b5563;
+      margin-bottom: 16px;
+    }
+
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .product-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .product-image {
+      width: 100%;
+      height: 140px;
+      background: #e5e7eb;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .product-name {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .product-desc {
+      font-size: 13px;
+      color: #4b5563;
+      margin-bottom: 8px;
+      flex: 1;
+    }
+
+    .product-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 4px;
+    }
+
+    .product-price {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .product-button {
+      border-radius: 999px;
+      border: none;
+      background: #2563eb;
+      color: white;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .product-button:hover {
+      background: #1d4ed8;
+    }
+
+    .note {
+      margin-top: 16px;
+      font-size: 12px;
+      color: #4b5563;
+      max-width: 600px;
+    }
+
+    .note code {
+      background: #111827;
+      color: #e5e7eb;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+
+    @media (max-width: 640px) {
+      .hero {
+        padding: 20px;
+      }
+      .content {
+        padding: 16px 16px 80px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="header-logo">FakeShop.hu</div>
+    <nav class="header-nav">
+      <a href="#">Főoldal</a>
+      <a href="#">Akciók</a>
+      <a href="#">Újdonságok</a>
+      <a href="#">Kapcsolat</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <div class="hero-badge">
+      🔮 Mitvegyek.ai demo
+    </div>
+    <h1>Kamu Webshop – Mitvegyek.ai integráció teszt</h1>
+    <p>
+      Ez egy demo webshop oldal, csak teszteléshez. A jobb alsó sarokban lévő Mitvegyek.ai
+      buborék egy valódi AI-ajándékajánlót hív meg a saját backend szerveredről.
+    </p>
+    <p class="hero-note">
+      Tipp: töltsd ki a buborék űrlapját, majd figyeld a teljes oldalas ajánló oldalt.  
+      A háttérben az általad importált termékkatalógusra dolgozik az AI.
+    </p>
+  </section>
+
+  <main class="content">
+    <div class="section-title">Kiemelt kamu termékek</div>
+    <div class="section-subtitle">
+      Ezek a kártyák csak vizuális díszlet – a valódi ajánlást a Mitvegyek.ai motor adja, a te termékadataid alapján.
+    </div>
+
+    <div class="product-grid">
+      <div class="product-card">
+        <div class="product-image">[Kamu termék fotó]</div>
+        <div class="product-name">Gaming fejhallgató PRO X</div>
+        <div class="product-desc">
+          Prémium hangzás, RGB világítás, kényelmes párnázás – gamereknek tökéletes.
+        </div>
+        <div class="product-footer">
+          <div class="product-price">29 990 Ft</div>
+          <button class="product-button">Megnézem</button>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="product-image">[Kamu termék fotó]</div>
+        <div class="product-name">Futócipő Runner 3000</div>
+        <div class="product-desc">
+          Könnyű és kényelmes futócipő edzéshez, utcára és futópadra.
+        </div>
+        <div class="product-footer">
+          <div class="product-price">19 990 Ft</div>
+          <button class="product-button">Megnézem</button>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="product-image">[Kamu termék fotó]</div>
+        <div class="product-name">Bluetooth hangszóró PocketBoom</div>
+        <div class="product-desc">
+          Kicsi, hordozható hangszóró erős basszussal, kiránduláshoz és bulikhoz.
+        </div>
+        <div class="product-footer">
+          <div class="product-price">14 990 Ft</div>
+          <button class="product-button">Megnézem</button>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="product-image">[Kamu termék fotó]</div>
+        <div class="product-name">Smartwatch FitLife</div>
+        <div class="product-desc">
+          Okosóra pulzusméréssel, alvásfigyeléssel és értesítésekkel, sportolóknak.
+        </div>
+        <div class="product-footer">
+          <div class="product-price">24 990 Ft</div>
+          <button class="product-button">Megnézem</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="note">
+      Ez az oldal úgy viselkedik, mint egy igazi webshop főoldal. A Mitvegyek.ai
+      widget beágyazása technikailag ugyanaz, mintha egy éles webshopba raknád:
+      <code>&lt;script src="https://.../widget.js" data-site-key="default"&gt;&lt;/script&gt;</code>
+    </p>
+  </main>
+
+  <!-- Itt a lényeg: a Mitvegyek.ai widget beágyazása -->
+  <script src="/widget.js" data-site-key="default"></script>
+</body>
+</html>

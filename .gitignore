@@ -1,0 +1,15 @@
+# secrets
+.env
+.env.*
+
+# runtime / build
+node_modules/
+dist/
+
+# app data (JSON-ok, importok, stb.)
+data/
+
+# OS/IDE
+.DS_Store
+Thumbs.db
+.vscode/

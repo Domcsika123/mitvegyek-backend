@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mitvegyek.ai – Statisztika részletek</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #f3f4f6;
+    }
+
+    .mv-container { max-width: 1100px; margin: 0 auto; }
+
+    .mv-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      padding: 18px 20px;
+      margin-bottom: 18px;
+    }
+
+    .mv-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    h1 { margin: 0 0 4px 0; }
+
+    .mv-small { font-size: 13px; color: #4b5563; }
+
+    .mv-status-error { margin-top: 8px; font-size: 13px; color: #b91c1c; }
+
+    .mv-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 999px; border: none; cursor: pointer;
+      padding: 6px 14px; font-size: 13px; text-decoration: none;
+    }
+    .mv-btn-secondary { background: #e5e7eb; color: #111827; }
+    .mv-btn-secondary:hover { background: #d1d5db; }
+
+    .mv-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .mv-box {
+      border-radius: 10px;
+      padding: 12px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+    }
+
+    .mv-box h3 { margin: 0 0 8px 0; font-size: 14px; }
+
+    .mv-pill {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid #e5e7eb;
+      background: white;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      margin: 4px 6px 0 0;
+    }
+
+    .mv-count {
+      font-weight: 700;
+      background: #111827;
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+    }
+
+    .mv-kv {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 8px;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12px;
+      background: #111827;
+      color: #e5e7eb;
+      padding: 3px 6px;
+      border-radius: 6px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 13px;
+      margin-top: 10px;
+      table-layout: fixed;
+    }
+
+    th, td {
+      padding: 8px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+      vertical-align: middle;
+      word-break: break-word;
+    }
+
+    th { font-weight: 600; color: #374151; }
+  </style>
+
+  <script>
+    // ✅ AUTH: ugyanaz, mint admin.html-ben
+    (function () {
+      const token = localStorage.getItem("mv_admin_token");
+      if (!token) {
+        window.location.href = "/admin-login.html";
+        return;
+      }
+      window.MV_ADMIN_TOKEN = token;
+    })();
+
+    // ✅ adminFetch wrapper tokennel
+    async function adminFetch(url, options) {
+      const token = window.MV_ADMIN_TOKEN;
+      const opts = options || {};
+      const headers = Object.assign({}, opts.headers || {}, {
+        "x-admin-token": token
+      });
+      opts.headers = headers;
+
+      const res = await fetch(url, opts);
+
+      if (res.status === 401) {
+        localStorage.removeItem("mv_admin_token");
+        window.location.href = "/admin-login.html";
+        return res;
+      }
+      return res;
+    }
+  </script>
+</head>
+<body>
+  <div class="mv-container">
+    <div class="mv-topbar">
+      <button class="mv-btn mv-btn-secondary" onclick="window.location.href='/admin.html'">
+        ← Vissza az adminhoz
+      </button>
+    </div>
+
+    <div class="mv-card">
+      <h1>Statisztika részletek</h1>
+      <p class="mv-small" id="stats-subtitle">Betöltés...</p>
+      <div id="stats-error" class="mv-status-error"></div>
+
+      <div id="stats-content" style="display:none;">
+
+        <!-- Alap KPI -->
+        <div class="mv-kv">
+          <div><strong>Összes ajánláskérés</strong></div>
+          <div id="kpi-total">0</div>
+
+          <div><strong>Utolsó ajánláskérés</strong></div>
+          <div id="kpi-last">-</div>
+        </div>
+
+        <!-- Kibővített stat blokkok -->
+        <div class="mv-grid">
+
+          <div class="mv-box">
+            <h3>Top keresések (mire kerestek)</h3>
+            <div id="box-free-text"></div>
+            <div class="mv-small" id="free-text-empty" style="display:none;">Még nincs elmentett keresés (free_text).</div>
+          </div>
+
+          <div class="mv-box">
+            <h3>Top kulcsszavak (interests)</h3>
+            <div id="box-interests"></div>
+            <div class="mv-small" id="interests-empty" style="display:none;">Még nincs elmentett kulcsszó.</div>
+          </div>
+
+          <div class="mv-box">
+            <h3>Budget eloszlás</h3>
+            <div id="box-budgets"></div>
+          </div>
+
+          <div class="mv-box">
+            <h3>Napi bontás (utolsó 30 nap)</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:45%;">Dátum</th>
+                  <th style="width:55%;">Kérések</th>
+                </tr>
+              </thead>
+              <tbody id="daily-tbody"></tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function formatDateTime(value) {
+      if (!value) return "-";
+      try {
+        const d = new Date(value);
+        if (isNaN(d.getTime())) return "-";
+        return d.toLocaleString("hu-HU");
+      } catch {
+        return "-";
+      }
+    }
+
+    function topEntries(obj, limit) {
+      const entries = Object.entries(obj || {});
+      entries.sort((a, b) => (b[1] || 0) - (a[1] || 0));
+      return entries.slice(0, limit);
+    }
+
+    function renderPills(container, entries, emptyEl) {
+      container.innerHTML = "";
+      if (!entries || entries.length === 0) {
+        if (emptyEl) emptyEl.style.display = "block";
+        return;
+      }
+      if (emptyEl) emptyEl.style.display = "none";
+
+      for (const [k, v] of entries) {
+        const pill = document.createElement("div");
+        pill.className = "mv-pill";
+        const label = document.createElement("span");
+        label.textContent = k;
+        const count = document.createElement("span");
+        count.className = "mv-count";
+        count.textContent = String(v || 0);
+        pill.appendChild(label);
+        pill.appendChild(count);
+        container.appendChild(pill);
+      }
+    }
+
+    async function loadStatsDetails() {
+      const params = new URLSearchParams(window.location.search);
+      const siteKey = params.get("site_key") || "";
+
+      const subtitleEl = document.getElementById("stats-subtitle");
+      const errorEl = document.getElementById("stats-error");
+      const contentEl = document.getElementById("stats-content");
+
+      errorEl.textContent = "";
+      contentEl.style.display = "none";
+
+      if (!siteKey) {
+        subtitleEl.textContent = "Hiányzik a site_key paraméter az URL-ben.";
+        return;
+      }
+
+      subtitleEl.innerHTML = `Statisztika a következő katalógushoz: <code>${siteKey}</code>`;
+
+      try {
+        // ✅ FONTOS: tokennel hívjuk
+        const res = await adminFetch("/api/admin/stats");
+        if (!res || !res.ok) throw new Error("HTTP " + (res ? res.status : "no-res"));
+
+        const data = await res.json();
+        const stats = data.stats || [];
+
+        const row = stats.find(r => (r.siteKey === siteKey || r.site_key === siteKey));
+
+        // Ha nincs sor, mutassunk “0” állapotot
+        const total = row?.totalRequests ?? 0;
+        const lastReq = row?.lastRequestAt ?? null;
+
+        document.getElementById("kpi-total").textContent = String(total);
+        document.getElementById("kpi-last").textContent = formatDateTime(lastReq);
+
+        // Top free_text
+        const freeTextMap = row?.freeTextCount || {};
+        const freeTextTop = topEntries(freeTextMap, 12);
+        renderPills(
+          document.getElementById("box-free-text"),
+          freeTextTop,
+          document.getElementById("free-text-empty")
+        );
+
+        // Top interests
+        const interestsMap = row?.interestsCount || {};
+        const interestsTop = topEntries(interestsMap, 18);
+        renderPills(
+          document.getElementById("box-interests"),
+          interestsTop,
+          document.getElementById("interests-empty")
+        );
+
+        // Budget bucketek
+        const budgetBox = document.getElementById("box-budgets");
+        const buckets = row?.priceBuckets || { "0-5000":0, "5001-10000":0, "10001-20000":0, "20001+":0 };
+        const bucketEntries = Object.entries(buckets);
+        renderPills(budgetBox, bucketEntries, null);
+
+        // Napi bontás
+        const tbody = document.getElementById("daily-tbody");
+        tbody.innerHTML = "";
+
+        const daily = (row?.dailyCounts || []).slice().sort((a,b) => String(a.date).localeCompare(String(b.date)));
+        if (daily.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='2'>Még nincs napi bontás (0 kérés).</td></tr>";
+        } else {
+          for (const d of daily) {
+            const tr = document.createElement("tr");
+            const tdDate = document.createElement("td");
+            tdDate.textContent = d.date;
+            const tdCount = document.createElement("td");
+            tdCount.textContent = String(d.count || 0);
+            tr.appendChild(tdDate);
+            tr.appendChild(tdCount);
+            tbody.appendChild(tr);
+          }
+        }
+
+        contentEl.style.display = "block";
+      } catch (err) {
+        console.error(err);
+        errorEl.textContent = "Hiba történt a statisztika betöltése közben.";
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", loadStatsDetails);
+  </script>
+</body>
+</html>

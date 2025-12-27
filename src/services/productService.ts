@@ -1,0 +1,227 @@
+// src/services/productService.ts
+
+import fs from "fs";
+import path from "path";
+import { Product } from "../models/Product";
+
+type CatalogMap = Record<string, Product[]>;
+
+const catalogs: CatalogMap = {};
+const DATA_DIR = path.join(__dirname, "..", "..", "data");
+
+/**
+ * Gondoskodunk róla, hogy a data/ mappa létezzen.
+ */
+function ensureDataDir() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+}
+
+/**
+ * Egy adott site_key katalógusának betöltése fájlrendszerből.
+ * - default → products.json
+ * - másik → products-<site_key>.json
+ */
+function loadCatalogFromDisk(siteKey: string): Product[] {
+  ensureDataDir();
+
+  let fileName = "products.json";
+  if (siteKey !== "default") {
+    fileName = `products-${siteKey}.json`;
+  }
+
+  const filePath = path.join(DATA_DIR, fileName);
+
+  if (!fs.existsSync(filePath)) {
+    console.warn(
+      `Termékfájl nem található [${siteKey}] alatt: ${filePath} – üres katalógus.`
+    );
+    return [];
+  }
+
+  try {
+    console.log(`Termékek betöltése [${siteKey}] innen: ${filePath}`);
+    const raw = fs.readFileSync(filePath, "utf8");
+    const data = JSON.parse(raw);
+
+    if (!Array.isArray(data)) {
+      console.warn(
+        `A termékfájl nem tömböt tartalmaz [${siteKey}]: ${filePath}`
+      );
+      return [];
+    }
+
+    const products: Product[] = data.map((p: any, idx: number) => ({
+      product_id: p.product_id ?? `p_${siteKey}_${idx}`,
+      name: p.name ?? "Ismeretlen termék",
+      price: Number(p.price) || 0,
+      category: p.category ?? "",
+      description: p.description ?? "",
+      image_url: p.image_url ?? "",
+      product_url: p.product_url ?? "",
+    }));
+
+    console.log(`Betöltött termékek száma [${siteKey}]: ${products.length}`);
+    return products;
+  } catch (err) {
+    console.error(
+      `Hiba történt a termékfájl betöltése közben [${siteKey}]:`,
+      err
+    );
+    return [];
+  }
+}
+
+/**
+ * Visszaadja az adott site_key-hez tartozó termékeket.
+ * Ha nincs ilyen katalógus vagy üres, a "default"-ot használja fallback-ként.
+ */
+export function getProductsForSite(siteKey: string): Product[] {
+  const key = siteKey || "default";
+
+  if (!catalogs[key]) {
+    catalogs[key] = loadCatalogFromDisk(key);
+  }
+
+  if (catalogs[key] && catalogs[key].length > 0) {
+    return catalogs[key];
+  }
+
+  // fallback: default katalógus
+  if (!catalogs["default"]) {
+    catalogs["default"] = loadCatalogFromDisk("default");
+  }
+
+  return catalogs["default"] || [];
+}
+
+/**
+ * Admin import: teljes katalógus csere + opcionális fájlba írás.
+ * A products*.json fájlokat írja.
+ */
+export function replaceCatalog(
+  siteKey: string,
+  products: Product[],
+  persistToDisk = true
+) {
+  const key = siteKey || "default";
+  catalogs[key] = products;
+
+  console.log(
+    `Katalógus frissítve [${key}], termékek száma: ${products.length}`
+  );
+
+  if (!persistToDisk) return;
+
+  ensureDataDir();
+  const fileName = key === "default" ? "products.json" : `products-${key}.json`;
+  const filePath = path.join(DATA_DIR, fileName);
+
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(products, null, 2), "utf8");
+    console.log(`Katalógus fájlba írva [${key}]: ${filePath}`);
+  } catch (err) {
+    console.error(
+      `Nem sikerült fájlba írni a katalógust [${key}] – ${filePath}`,
+      err
+    );
+  }
+}
+
+/**
+ * Katalógus összefoglalók az admin HTML-nek.
+ * Itt KÖZVETLENÜL a data/ mappában lévő JSON fájlokat nézzük,
+ * függetlenül attól, hogy mi van a memóriában.
+ */
+export function getCatalogSummaries(): { site_key: string; count: number }[] {
+  ensureDataDir();
+
+  let summaries: { site_key: string; count: number }[] = [];
+
+  try {
+    const files = fs.readdirSync(DATA_DIR);
+    const productFiles = files.filter(
+      (f) => f.startsWith("products") && f.endsWith(".json")
+    );
+
+    productFiles.forEach((fileName) => {
+      let siteKey = "default";
+      if (fileName !== "products.json") {
+        // "products-<site_key>.json" → <site_key>
+        siteKey = fileName.slice("products-".length, -".json".length);
+      }
+
+      const filePath = path.join(DATA_DIR, fileName);
+      try {
+        const raw = fs.readFileSync(filePath, "utf8");
+        const data = JSON.parse(raw);
+        const count = Array.isArray(data) ? data.length : 0;
+        summaries.push({ site_key: siteKey, count });
+      } catch (err) {
+        console.error(
+          `[productService] Nem sikerült beolvasni a katalógust [${siteKey}] (${filePath}):`,
+          err
+        );
+        summaries.push({ site_key: siteKey, count: 0 });
+      }
+    });
+  } catch (err) {
+    console.error(
+      "[productService] Hiba a katalógus összefoglalók olvasása közben:",
+      err
+    );
+  }
+
+  return summaries;
+}
+
+/**
+ * Admin felület által használt katalógus-lista.
+ * Ugyanaz, mint getCatalogSummaries, csak név szerint külön exportálva.
+ */
+export function listCatalogs(): { site_key: string; count: number }[] {
+  return getCatalogSummaries();
+}
+
+/**
+ * Régi kód kompatibilitás: default katalógus.
+ */
+export function getAllProducts(): Product[] {
+  return getProductsForSite("default");
+}
+
+/**
+ * Katalógus törlése (ha valaha használod partner törlésnél).
+ * - memóriából törli
+ * - a products-<site_key>.json fájlt is törli (defaultot nem)
+ */
+export function deleteCatalog(siteKey: string) {
+  const key = siteKey || "default";
+
+  // memóriából
+  if (catalogs[key]) {
+    delete catalogs[key];
+  }
+
+  // default katalógust nem töröljük fájlból
+  if (key === "default") {
+    return;
+  }
+
+  ensureDataDir();
+  const fileName = `products-${key}.json`;
+  const filePath = path.join(DATA_DIR, fileName);
+
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log(`Katalógus fájl törölve [${key}]: ${filePath}`);
+    }
+  } catch (err) {
+    console.error(
+      `Nem sikerült törölni a katalógus fájlt [${key}] – ${filePath}`,
+      err
+    );
+  }
+}

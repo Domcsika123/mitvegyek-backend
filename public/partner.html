@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mitvegyek.ai – Partner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 24px; background: #f3f4f6; }
+    .mv-container { max-width: 900px; margin: 0 auto; }
+    .mv-card { background: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 18px 20px; margin-bottom: 18px; }
+    .mv-small { font-size: 13px; color: #4b5563; }
+    .mv-label { font-size: 12px; color: #6b7280; margin-top: 10px; }
+    .mv-value { font-size: 14px; color: #111827; font-weight: 700; }
+    .mv-code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12px;
+      background: #111827;
+      color: #e5e7eb;
+      padding: 8px 10px;
+      border-radius: 8px;
+      white-space: nowrap;
+      overflow-x: auto;
+      display: block;
+      margin-top: 4px;
+    }
+    .mv-btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; border: none; cursor: pointer; padding: 6px 14px; font-size: 13px; margin-top: 10px; margin-right: 8px; }
+    .mv-btn-primary { background: #2563eb; color: white; }
+    .mv-btn-primary:hover { background: #1d4ed8; }
+    .mv-btn-secondary { background: #e5e7eb; color: #111827; }
+    .mv-status { margin-top: 8px; font-size: 13px; }
+    .mv-status-error { color: #b91c1c; }
+  </style>
+
+  <script>
+    // ✅ token check (mint admin.html-nél)
+    (function () {
+      const token = localStorage.getItem("mv_admin_token");
+      if (!token) {
+        window.location.href = "/admin-login.html";
+        return;
+      }
+      window.MV_ADMIN_TOKEN = token;
+    })();
+
+    async function adminFetch(url, options) {
+      const opts = options || {};
+      const headers = Object.assign({}, opts.headers || {}, {
+        "x-admin-token": window.MV_ADMIN_TOKEN
+      });
+      opts.headers = headers;
+
+      const res = await fetch(url, opts);
+      if (res.status === 401) {
+        localStorage.removeItem("mv_admin_token");
+        window.location.href = "/admin-login.html";
+      }
+      return res;
+    }
+  </script>
+</head>
+<body>
+  <div class="mv-container">
+    <div class="mv-card">
+      <h1>Partner részletek</h1>
+      <p class="mv-small">Itt látod a partner (webshop) API adatait és a beágyazási kódot.</p>
+      <button id="back-btn" class="mv-btn mv-btn-secondary">← Vissza az adminhoz</button>
+    </div>
+
+    <div class="mv-card" id="partner-card">
+      <p class="mv-status" id="status"></p>
+
+      <div id="partner-content" style="display:none;">
+        <div>
+          <div class="mv-label">Partner neve</div>
+          <div class="mv-value" id="p-name"></div>
+        </div>
+
+        <div>
+          <div class="mv-label">site_key</div>
+          <div class="mv-value" id="p-site-key"></div>
+        </div>
+
+        <div>
+          <div class="mv-label">api_key</div>
+          <div class="mv-value" id="p-api-key"></div>
+        </div>
+
+        <div>
+          <div class="mv-label">Létrehozva</div>
+          <div class="mv-value" id="p-created"></div>
+        </div>
+
+        <div style="margin-top: 12px;">
+          <div class="mv-label">Beágyazási kód</div>
+          <code class="mv-code" id="embed-code"></code>
+          <button id="copy-btn" class="mv-btn mv-btn-primary">Kód másolása</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function getQueryParam(name) {
+      const params = new URLSearchParams(window.location.search);
+      return params.get(name);
+    }
+
+    document.getElementById("back-btn").addEventListener("click", () => {
+      window.location.href = "/admin.html";
+    });
+
+    async function loadPartner() {
+      const statusEl = document.getElementById("status");
+      const contentEl = document.getElementById("partner-content");
+
+      const siteKey = getQueryParam("site_key");
+      if (!siteKey) {
+        statusEl.textContent = "Hiányzó site_key a URL-ben.";
+        statusEl.classList.add("mv-status-error");
+        return;
+      }
+
+      statusEl.textContent = "Betöltés...";
+      statusEl.classList.remove("mv-status-error");
+
+      try {
+        const res = await adminFetch(`/api/admin/partners/${encodeURIComponent(siteKey)}`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Nem sikerült lekérni a partner adatait.");
+        }
+
+        const data = await res.json();
+        const p = data.partner;
+
+        const origin = window.location.origin;
+        const embedCode =
+          `<script src="${origin}/widget.js" data-site-key="${p.site_key}" data-api-key="${p.api_key}"></` +
+          `script>`;
+
+        document.getElementById("p-name").textContent = p.name;
+        document.getElementById("p-site-key").textContent = p.site_key;
+        document.getElementById("p-api-key").textContent = p.api_key;
+
+        // ✅ created_at kompatibilitás
+        const createdRaw = p.created_at || p.createdAt || p.created_at_iso || p.created;
+        document.getElementById("p-created").textContent = createdRaw
+          ? new Date(createdRaw).toLocaleString("hu-HU")
+          : "-";
+
+        document.getElementById("embed-code").textContent = embedCode;
+
+        const copyBtn = document.getElementById("copy-btn");
+        copyBtn.onclick = async () => {
+          try {
+            await navigator.clipboard.writeText(embedCode);
+            const old = copyBtn.textContent;
+            copyBtn.textContent = "Kimásolva ✔";
+            setTimeout(() => (copyBtn.textContent = old), 1500);
+          } catch (e) {
+            console.error(e);
+          }
+        };
+
+        statusEl.textContent = "";
+        contentEl.style.display = "block";
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = err.message;
+        statusEl.classList.add("mv-status-error");
+      }
+    }
+
+    loadPartner();
+  </script>
+</body>
+</html>

@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mitvegyek.ai – Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #f3f4f6;
+    }
+
+    h1 { margin-bottom: 8px; }
+
+    .mv-container { max-width: 1100px; margin: 0 auto; }
+
+    .mv-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      padding: 18px 20px;
+      margin-bottom: 18px;
+    }
+
+    .mv-card h2 { margin-top: 0; margin-bottom: 6px; }
+
+    .mv-small { font-size: 13px; color: #4b5563; }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 14px;
+      margin-top: 10px;
+      table-layout: fixed;
+    }
+
+    th, td {
+      padding: 8px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+      vertical-align: middle;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    th { font-weight: 600; color: #374151; }
+
+    .mv-button-link {
+      display: inline-block;
+      margin-top: 4px;
+      margin-right: 8px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #2563eb;
+      color: white;
+      font-size: 12px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .mv-button-link:hover { background: #1d4ed8; }
+
+    .mv-input-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .mv-input-group {
+      display: flex;
+      flex-direction: column;
+      min-width: 140px;
+      flex: 1;
+    }
+
+    .mv-input-group label {
+      font-size: 12px;
+      color: #4b5563;
+      margin-bottom: 4px;
+    }
+
+    .mv-input-group input {
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      padding: 6px 8px;
+      font-size: 13px;
+    }
+
+    .mv-input-group input:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 1px #2563eb33;
+    }
+
+    .mv-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      padding: 6px 14px;
+      font-size: 13px;
+      margin-top: 10px;
+      white-space: nowrap;
+    }
+
+    .mv-btn-primary { background: #2563eb; color: white; }
+    .mv-btn-primary:hover { background: #1d4ed8; }
+
+    .mv-btn-secondary { background: #e5e7eb; color: #111827; }
+    .mv-btn-secondary:hover { background: #d1d5db; }
+
+    .mv-btn-danger { background: #dc2626; color: white; }
+    .mv-btn-danger:hover { background: #b91c1c; }
+
+    .mv-status { margin-top: 8px; font-size: 13px; }
+    .mv-status-ok { color: #166534; }
+    .mv-status-error { color: #b91c1c; }
+
+    .mv-file-label { font-size: 13px; color: #4b5563; margin-top: 6px; }
+
+    .mv-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .mv-inline-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      padding: 2px 8px;
+      font-size: 11px;
+      margin-left: 6px;
+      background: #e5e7eb;
+      color: #111827;
+      white-space: nowrap;
+    }
+
+    .mv-inline-btn:hover { background: #d1d5db; }
+
+    .mv-topbar {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom: 10px;
+    }
+
+    .mv-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+    .mv-pill {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:2px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:700;
+      background:#f1f5f9;
+      color:#0f172a;
+      margin-left:8px;
+    }
+    .mv-pill.blocked { background:#fee2e2; color:#991b1b; }
+    .mv-pill.active { background:#dcfce7; color:#166534; }
+  </style>
+
+  <!-- PapaParse a CSV feldolgozáshoz a böngészőben -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <script>
+    // ✅ AUTH: admin token ellenőrzés azonnal
+    (function () {
+      const token = localStorage.getItem("mv_admin_token");
+      if (!token) {
+        window.location.href = "/admin-login.html";
+        return;
+      }
+      window.MV_ADMIN_TOKEN = token;
+    })();
+
+    // ✅ adminFetch wrapper: minden admin API hívás automatikusan tokennel megy
+    async function adminFetch(url, options) {
+      const token = window.MV_ADMIN_TOKEN;
+      const opts = options || {};
+      const headers = Object.assign({}, opts.headers || {}, {
+        "x-admin-token": token
+      });
+      opts.headers = headers;
+
+      const res = await fetch(url, opts);
+
+      if (res.status === 401) {
+        localStorage.removeItem("mv_admin_token");
+        window.location.href = "/admin-login.html";
+        return res;
+      }
+      return res;
+    }
+
+    async function adminLogout() {
+      try { await adminFetch("/api/admin/logout", { method: "POST" }); } catch (_) {}
+      localStorage.removeItem("mv_admin_token");
+      window.location.href = "/admin-login.html";
+    }
+  </script>
+</head>
+<body>
+  <div class="mv-container">
+    <div class="mv-topbar">
+      <div>
+        <h1>Mitvegyek.ai – Admin</h1>
+        <p class="mv-small">
+          Katalógusok, partnerek, statisztikák.
+        </p>
+      </div>
+      <button class="mv-btn mv-btn-secondary" onclick="adminLogout()">Kijelentkezés</button>
+    </div>
+
+    <!-- Webshop-katalógusok -->
+    <div class="mv-card">
+      <h2>Webshop-katalógusok</h2>
+
+      <table id="catalog-table">
+        <thead>
+          <tr>
+            <th style="width: 22%;">site_key</th>
+            <th style="width: 18%;">Termékek száma</th>
+            <th style="width: 60%;">Teszt és műveletek</th>
+          </tr>
+        </thead>
+        <tbody id="catalog-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- CSV import -->
+    <div class="mv-card">
+      <h2>Termékek importálása CSV-ből</h2>
+      <p class="mv-small">
+        A <strong>product_id</strong>, <strong>name</strong> és <strong>price</strong> mezők kötelezők.
+      </p>
+
+      <div class="mv-input-row">
+        <div class="mv-input-group" style="max-width: 220px;">
+          <label for="csv-site-key">site_key</label>
+          <input id="csv-site-key" type="text" placeholder="pl. default vagy haver-shop" />
+        </div>
+      </div>
+
+      <div class="mv-file-label">CSV fájl:</div>
+      <input id="csv-file" type="file" accept=".csv,text/csv" />
+
+      <div class="mv-input-row">
+        <div class="mv-input-group">
+          <label for="col-id">product_id oszlop *</label>
+          <input id="col-id" type="text" placeholder="pl. product_id" />
+        </div>
+        <div class="mv-input-group">
+          <label for="col-name">name oszlop *</label>
+          <input id="col-name" type="text" placeholder="pl. name" />
+        </div>
+        <div class="mv-input-group">
+          <label for="col-price">price oszlop *</label>
+          <input id="col-price" type="text" placeholder="pl. price" />
+        </div>
+      </div>
+
+      <div class="mv-input-row">
+        <div class="mv-input-group">
+          <label for="col-category">category oszlop</label>
+          <input id="col-category" type="text" placeholder="pl. category" />
+        </div>
+        <div class="mv-input-group">
+          <label for="col-description">description oszlop</label>
+          <input id="col-description" type="text" placeholder="pl. description" />
+        </div>
+      </div>
+
+      <div class="mv-input-row">
+        <div class="mv-input-group">
+          <label for="col-url">product_url oszlop</label>
+          <input id="col-url" type="text" placeholder="pl. product_url" />
+        </div>
+        <div class="mv-input-group">
+          <label for="col-image">image_url oszlop</label>
+          <input id="col-image" type="text" placeholder="pl. image_url" />
+        </div>
+      </div>
+
+      <button id="csv-import-btn" class="mv-btn mv-btn-primary">CSV importálása</button>
+      <div id="csv-status" class="mv-status"></div>
+    </div>
+
+    <!-- Partnerek -->
+    <div class="mv-card">
+      <h2>Partnerek kezelése</h2>
+
+      <div class="mv-input-row">
+        <div class="mv-input-group" style="max-width: 260px;">
+          <label for="partner-name">Új partner neve</label>
+          <input id="partner-name" type="text" placeholder="pl. Haver Webshop" />
+        </div>
+      </div>
+
+      <button id="partner-create-btn" class="mv-btn mv-btn-primary">Új partner létrehozása</button>
+      <div id="partner-status" class="mv-status"></div>
+
+      <h3 style="margin-top: 18px;">Partnerek listája</h3>
+
+      <table id="partner-table">
+        <thead>
+          <tr>
+            <th style="width: 40%;">Név</th>
+            <th style="width: 60%;">Műveletek</th>
+          </tr>
+        </thead>
+        <tbody id="partner-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Statisztika áttekintés -->
+    <div class="mv-card">
+      <h2>Ajánláskérések statisztikája</h2>
+
+      <table id="stats-table">
+        <thead>
+          <tr>
+            <th>site_key</th>
+            <th>Műveletek</th>
+          </tr>
+        </thead>
+        <tbody id="stats-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    function safeGet(id) { return document.getElementById(id); }
+
+    function setStatus(el, text, ok) {
+      if (!el) return;
+      el.textContent = text || "";
+      el.className = "mv-status";
+      if (!text) return;
+      if (ok === true) el.classList.add("mv-status-ok");
+      if (ok === false) el.classList.add("mv-status-error");
+    }
+
+    // ✅ site_key -> partner (api_key + blocked)
+    let partnersBySiteKey = new Map();
+    let validSiteKeys = new Set();
+
+    async function loadPartners() {
+      const tbody = safeGet("partner-tbody");
+      if (!tbody) return;
+      tbody.innerHTML = "<tr><td colspan='2'>Betöltés...</td></tr>";
+
+      try {
+        const response = await adminFetch("/api/admin/partners");
+        if (!response || !response.ok) throw new Error("Nem sikerült lekérni a partnereket.");
+
+        const data = await response.json();
+        const partners = data.partners || [];
+
+        partnersBySiteKey = new Map();
+        partners.forEach(p => partnersBySiteKey.set(p.site_key, p));
+        validSiteKeys = new Set(partners.map(p => p.site_key));
+
+        if (partners.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='2'>Még nincs partner létrehozva.</td></tr>";
+          return;
+        }
+
+        const origin = window.location.origin;
+        tbody.innerHTML = "";
+
+        partners.forEach((p) => {
+          const tr = document.createElement("tr");
+
+          const tdName = document.createElement("td");
+          tdName.innerHTML = `
+            <span>${escapeHtml(p.name || "")}</span>
+            <span class="mv-pill ${p.blocked ? "blocked" : "active"}">
+              ${p.blocked ? "BLOKKOLVA" : "AKTÍV"}
+            </span>
+          `;
+
+          tr.appendChild(tdName);
+
+          const tdActions = document.createElement("td");
+          tdActions.className = "mv-actions";
+
+          const moreBtn = document.createElement("button");
+          moreBtn.className = "mv-btn mv-btn-secondary";
+          moreBtn.textContent = "Mutass többet";
+          moreBtn.addEventListener("click", () => {
+            window.location.href = `${origin}/partner.html?site_key=${encodeURIComponent(p.site_key)}`;
+          });
+          tdActions.appendChild(moreBtn);
+
+          const blockBtn = document.createElement("button");
+          blockBtn.className = "mv-btn mv-btn-secondary";
+          blockBtn.textContent = p.blocked ? "Feloldás" : "Blokkolás";
+          blockBtn.addEventListener("click", async () => {
+            const newState = !p.blocked;
+            try {
+              const res = await adminFetch(`/api/admin/partners/${encodeURIComponent(p.site_key)}/block`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ blocked: newState }),
+              });
+
+              if (!res || !res.ok) {
+                const err = await (res ? res.json().catch(() => ({})) : Promise.resolve({}));
+                throw new Error(err.error || "Ismeretlen hiba");
+              }
+
+              // frissítés
+              await loadPartners();
+              await loadCatalogs();
+            } catch (e) {
+              console.error(e);
+              alert("Hiba a blokkolás/feloldás során: " + e.message);
+            }
+          });
+          tdActions.appendChild(blockBtn);
+
+          const delBtn = document.createElement("button");
+          delBtn.className = "mv-btn mv-btn-danger";
+          delBtn.textContent = "Törlés";
+          delBtn.addEventListener("click", async () => {
+            const sure = confirm(`Biztosan törlöd ezt a partnert?\n\nNév: ${p.name}\nsite_key: ${p.site_key}`);
+            if (!sure) return;
+
+            try {
+              const res = await adminFetch(`/api/admin/partners/${encodeURIComponent(p.site_key)}`, {
+                method: "DELETE",
+              });
+
+              if (!res || !res.ok) {
+                const err = await (res ? res.json().catch(() => ({})) : Promise.resolve({}));
+                throw new Error(err.error || "Ismeretlen hiba");
+              }
+
+              await loadPartners();
+              await loadCatalogs();
+              await loadStatsOverview();
+            } catch (e) {
+              console.error(e);
+              alert("Hiba a partner törlésekor: " + e.message);
+            }
+          });
+          tdActions.appendChild(delBtn);
+
+          tr.appendChild(tdActions);
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error(err);
+        tbody.innerHTML = "<tr><td colspan='2'>Hiba történt a partnerek betöltése közben.</td></tr>";
+      }
+    }
+
+    async function loadCatalogs() {
+      const tbody = safeGet("catalog-tbody");
+      if (!tbody) return;
+      tbody.innerHTML = "<tr><td colspan='3'>Betöltés...</td></tr>";
+
+      try {
+        const response = await adminFetch("/api/admin/catalogs");
+        if (!response || !response.ok) throw new Error("Nem sikerült lekérni a katalógusokat.");
+
+        const data = await response.json();
+        const rawCatalogs = data.catalogs || [];
+
+        const catalogs = rawCatalogs.map((c) => {
+          const siteKey = c.siteKey || c.site_key || c.key || "ismeretlen";
+          const productCount =
+            typeof c.productCount === "number" ? c.productCount :
+            typeof c.count === "number" ? c.count : 0;
+          return { siteKey, productCount };
+        });
+
+        if (catalogs.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='3'>Nincs betöltött katalógus.</td></tr>";
+          return;
+        }
+
+        const origin = window.location.origin;
+        tbody.innerHTML = "";
+
+        catalogs.forEach((cat) => {
+          const tr = document.createElement("tr");
+
+          const tdKey = document.createElement("td");
+          tdKey.textContent = cat.siteKey;
+          tr.appendChild(tdKey);
+
+          const tdCount = document.createElement("td");
+          tdCount.textContent = String(cat.productCount);
+          tr.appendChild(tdCount);
+
+          const tdTest = document.createElement("td");
+
+          // ✅ itt a lényeg: a widget teszt link kapja meg az api_key-t is
+          const partner = partnersBySiteKey.get(cat.siteKey);
+          const apiKey = partner && partner.api_key ? String(partner.api_key) : "";
+
+          const linkDemo = document.createElement("a");
+          const qs = new URLSearchParams();
+          qs.set("site_key", cat.siteKey);
+          if (apiKey) qs.set("api_key", apiKey);
+
+          linkDemo.href = `${origin}/demo.html?${qs.toString()}`;
+          linkDemo.target = "_blank";
+          linkDemo.rel = "noopener noreferrer";
+          linkDemo.className = "mv-button-link";
+          linkDemo.textContent = apiKey ? "Widget teszt" : "Widget teszt (nincs api_key)";
+          tdTest.appendChild(linkDemo);
+
+          const delBtn = document.createElement("button");
+          delBtn.className = "mv-inline-btn";
+          delBtn.textContent = "Katalógus törlése";
+          delBtn.addEventListener("click", async () => {
+            const sure = confirm(`Biztosan törlöd ezt a katalógust?\n\nsite_key: ${cat.siteKey}`);
+            if (!sure) return;
+
+            try {
+              const res = await adminFetch(`/api/admin/catalogs/${encodeURIComponent(cat.siteKey)}`, {
+                method: "DELETE"
+              });
+              if (!res || !res.ok) {
+                const err = await (res ? res.json().catch(() => ({})) : Promise.resolve({}));
+                throw new Error(err.error || "Ismeretlen hiba");
+              }
+
+              await loadCatalogs();
+              await loadStatsOverview();
+            } catch (e) {
+              console.error(e);
+              alert("Hiba a katalógus törlésekor: " + e.message);
+            }
+          });
+          tdTest.appendChild(delBtn);
+
+          tr.appendChild(tdTest);
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error(err);
+        tbody.innerHTML = "<tr><td colspan='3'>Hiba történt a katalógusok betöltése közben.</td></tr>";
+      }
+    }
+
+    async function loadStatsOverview() {
+      const tbody = safeGet("stats-tbody");
+      if (!tbody) return;
+      tbody.innerHTML = "<tr><td colspan='2'>Betöltés...</td></tr>";
+
+      try {
+        const res = await adminFetch("/api/admin/catalogs");
+        if (!res || !res.ok) throw new Error("Nem sikerült lekérni a katalógusokat.");
+
+        const data = await res.json();
+        const rawCatalogs = data.catalogs || [];
+        const catalogs = rawCatalogs.map((c) => ({
+          siteKey: c.siteKey || c.site_key || c.key || "ismeretlen"
+        }));
+
+        if (catalogs.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='2'>Nincs katalógus, ezért statisztika sem érhető el.</td></tr>";
+          return;
+        }
+
+        const origin = window.location.origin;
+        tbody.innerHTML = "";
+
+        catalogs.forEach((cat) => {
+          const tr = document.createElement("tr");
+
+          const tdKey = document.createElement("td");
+          tdKey.textContent = cat.siteKey;
+          tr.appendChild(tdKey);
+
+          const tdActions = document.createElement("td");
+          const btn = document.createElement("button");
+          btn.className = "mv-inline-btn";
+          btn.textContent = "Részletek";
+          btn.addEventListener("click", () => {
+            window.location.href = `${origin}/stats.html?site_key=${encodeURIComponent(cat.siteKey)}`;
+          });
+          tdActions.appendChild(btn);
+          tr.appendChild(tdActions);
+
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error(err);
+        tbody.innerHTML = "<tr><td colspan='2'>Hiba történt a statisztika betöltése közben.</td></tr>";
+      }
+    }
+
+    function parsePrice(raw) {
+      if (!raw) return 0;
+      const cleaned = raw.toString().replace(/\s+/g, "").replace(/[^0-9.,]/g, "");
+      if (!cleaned) return 0;
+      const normalized = cleaned.replace(",", ".");
+      const num = Number(normalized);
+      if (Number.isNaN(num)) return 0;
+      return Math.round(num);
+    }
+
+    function setupCsvImport() {
+      const btn = safeGet("csv-import-btn");
+      const statusEl = safeGet("csv-status");
+      if (!btn) return;
+
+      btn.addEventListener("click", () => {
+        const siteKeyInput = safeGet("csv-site-key");
+        const fileInput = safeGet("csv-file");
+
+        const colId = (safeGet("col-id")?.value || "").trim();
+        const colName = (safeGet("col-name")?.value || "").trim();
+        const colPrice = (safeGet("col-price")?.value || "").trim();
+        const colCategory = (safeGet("col-category")?.value || "").trim();
+        const colDesc = (safeGet("col-description")?.value || "").trim();
+        const colUrl = (safeGet("col-url")?.value || "").trim();
+        const colImage = (safeGet("col-image")?.value || "").trim();
+
+        const siteKey = (siteKeyInput?.value || "").trim();
+        setStatus(statusEl, "", null);
+
+        if (!siteKey) { setStatus(statusEl, "Kérlek add meg a site_key értékét.", false); return; }
+        if (!validSiteKeys.has(siteKey)) {
+          setStatus(statusEl, `Nincs ilyen partner / site_key: ${siteKey}. Először hozd létre partnert ezen a néven.`, false);
+          return;
+        }
+
+        if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+          setStatus(statusEl, "Kérlek válassz egy CSV fájlt.", false);
+          return;
+        }
+
+        if (!colId || !colName || !colPrice) {
+          setStatus(statusEl, "A product_id, name és price oszlopnevek megadása kötelező.", false);
+          return;
+        }
+
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+
+        reader.onload = async (e) => {
+          try {
+            const csvText = e.target.result;
+            const parsed = Papa.parse(csvText, {
+              header: true,
+              skipEmptyLines: true,
+              trimHeaders: true,
+            });
+
+            const rows = parsed.data || [];
+            const items = [];
+            let skipped = 0;
+
+            for (const row of rows) {
+              const product_id = (row[colId] || "").toString().trim();
+              const name = (row[colName] || "").toString().trim();
+              const priceRaw = row[colPrice];
+
+              if (!product_id || !name) { skipped++; continue; }
+
+              const price = parsePrice(priceRaw);
+              const category = colCategory ? (row[colCategory] || "").toString().trim() : "";
+              const description = colDesc ? (row[colDesc] || "").toString().trim() : "";
+              const product_url = colUrl ? (row[colUrl] || "").toString().trim() : "";
+              const image_url = colImage ? (row[colImage] || "").toString().trim() : "";
+
+              items.push({
+                product_id, name, price, category, description,
+                product_url: product_url || undefined,
+                image_url: image_url || undefined,
+              });
+            }
+
+            if (items.length === 0) {
+              setStatus(statusEl, "Nem találtam importálható terméket.", false);
+              return;
+            }
+
+            setStatus(statusEl, `Import folyamatban... (${items.length} termék, kihagyott sorok: ${skipped})`, true);
+
+            const response = await adminFetch("/api/admin/import-products", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ site_key: siteKey, items }),
+            });
+
+            if (!response || !response.ok) {
+              const errData = await (response ? response.json().catch(() => ({})) : Promise.resolve({}));
+              throw new Error(errData.error || "Ismeretlen hiba");
+            }
+
+            const data = await response.json();
+            setStatus(statusEl, `Import sikeres. site_key=${data.site_key}, termékek száma: ${data.count}`, true);
+
+            if (siteKeyInput) siteKeyInput.value = "";
+            if (fileInput) fileInput.value = "";
+
+            ["col-id","col-name","col-price","col-category","col-description","col-url","col-image"].forEach((id) => {
+              const inp = safeGet(id);
+              if (inp) inp.value = "";
+            });
+
+            setTimeout(() => setStatus(statusEl, "", null), 3000);
+
+            await loadCatalogs();
+            await loadStatsOverview();
+          } catch (err) {
+            console.error(err);
+            setStatus(statusEl, "Hiba az import során: " + err.message, false);
+          }
+        };
+
+        reader.readAsText(file, "utf-8");
+      });
+    }
+
+    function setupPartnerForm() {
+      const btn = safeGet("partner-create-btn");
+      const statusEl = safeGet("partner-status");
+      const input = safeGet("partner-name");
+      if (!btn) return;
+
+      btn.addEventListener("click", async () => {
+        const name = (input?.value || "").trim();
+        setStatus(statusEl, "", null);
+
+        if (!name) {
+          setStatus(statusEl, "Írj be egy partner nevet!", false);
+          return;
+        }
+
+        try {
+          setStatus(statusEl, "Partner létrehozása folyamatban...", true);
+
+          const res = await adminFetch("/api/admin/partners", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+          });
+
+          if (!res || !res.ok) {
+            const err = await (res ? res.json().catch(() => ({})) : Promise.resolve({}));
+            throw new Error(err.error || "Ismeretlen hiba");
+          }
+
+          await res.json();
+          setStatus(statusEl, "Partner sikeresen létrehozva.", true);
+          if (input) input.value = "";
+
+          setTimeout(() => setStatus(statusEl, "", null), 2500);
+
+          await loadPartners();
+          await loadCatalogs();
+          await loadStatsOverview();
+        } catch (err) {
+          console.error(err);
+          setStatus(statusEl, "Hiba a partner létrehozásakor: " + err.message, false);
+        }
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    async function initAdmin() {
+      // Fontos sorrend:
+      // 1) partnerek (api_key map)
+      // 2) katalógusok (widget teszt link api_key-vel)
+      await loadPartners();
+      await loadCatalogs();
+      await loadStatsOverview();
+      setupCsvImport();
+      setupPartnerForm();
+    }
+
+    window.addEventListener("DOMContentLoaded", initAdmin);
+  </script>
+</body>
+</html>
