@@ -167,6 +167,35 @@
     }
     .mv-pill.blocked { background:#fee2e2; color:#991b1b; }
     .mv-pill.active { background:#dcfce7; color:#166534; }
+
+    /* ====== MOBIL FIX (csak mobilon: ne legyen ... és férjen el normálisan) ====== */
+    @media (max-width: 640px) {
+      .mv-card { padding: 14px 14px; }
+
+      /* ha széles a táblázat, lehessen oldalra görgetni */
+      table { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; table-layout: auto; }
+
+      /* mobilon ne vágjuk le ...-ra, inkább törjük a szöveget */
+      th, td {
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        word-break: break-word;
+      }
+
+      /* a műveletek gombjai egymás alá kerüljenek és legyenek szélesek */
+      .mv-actions { flex-direction: column; align-items: stretch; }
+      .mv-actions .mv-btn,
+      .mv-actions .mv-inline-btn,
+      .mv-actions .mv-button-link {
+        width: 100%;
+        box-sizing: border-box;
+        margin-left: 0;
+        margin-right: 0;
+        text-align: center;
+        justify-content: center;
+      }
+    }
   </style>
 
   <!-- PapaParse a CSV feldolgozáshoz a böngészőben -->
