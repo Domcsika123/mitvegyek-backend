@@ -11,6 +11,8 @@
     .mv-small { font-size: 13px; color: #4b5563; }
     .mv-label { font-size: 12px; color: #6b7280; margin-top: 10px; }
     .mv-value { font-size: 14px; color: #111827; font-weight: 700; }
+
+    /* Beágyazási kód stílus */
     .mv-code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
       font-size: 12px;
@@ -23,30 +25,31 @@
       display: block;
       margin-top: 4px;
     }
+
+    /* ✅ Ugyanaz a stílus az api_key-nek is, csak más színnel (csak MOBILON) */
+    @media (max-width: 640px) {
+      #p-api-key.mv-code-like {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 12px;
+        background: #0b1220;          /* más szín */
+        color: #dbeafe;               /* világosabb betű */
+        padding: 8px 10px;
+        border-radius: 8px;
+        white-space: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        display: block;
+        margin-top: 4px;
+        max-width: 100%;
+      }
+    }
+
     .mv-btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; border: none; cursor: pointer; padding: 6px 14px; font-size: 13px; margin-top: 10px; margin-right: 8px; }
     .mv-btn-primary { background: #2563eb; color: white; }
     .mv-btn-primary:hover { background: #1d4ed8; }
     .mv-btn-secondary { background: #e5e7eb; color: #111827; }
     .mv-status { margin-top: 8px; font-size: 13px; }
     .mv-status-error { color: #b91c1c; }
-
-    /* ✅ CSAK MOBILON: api_key legyen egy sorban + belső scroll a dobozon */
-    @media (max-width: 640px) {
-      #p-api-key {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        background: #f8fafc;
-        border: 1px solid #e5e7eb;
-        border-radius: 12px;
-        padding: 10px 12px;
-
-        white-space: nowrap;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-
-        display: block;
-        max-width: 100%;
-      }
-    }
   </style>
 
   <script>
@@ -100,7 +103,8 @@
 
         <div>
           <div class="mv-label">api_key</div>
-          <div class="mv-value" id="p-api-key"></div>
+          <!-- ✅ mobilon "mv-code-like" stílus, desktop marad sima -->
+          <div class="mv-value mv-code-like" id="p-api-key"></div>
         </div>
 
         <div>
