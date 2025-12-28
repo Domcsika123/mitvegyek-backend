@@ -848,6 +848,12 @@
         resetBtn.textContent = "🔄 Új ajánlat";
       }, 1200);
     }
+        // ✅ mindig ugorjon a panel tetejére
+    try {
+      var bodyEl = document.querySelector("#mv-widget-panel .mv-widget-body");
+      if (bodyEl) bodyEl.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (_) {}
+
   }
 
   function parseNumberOrNull(value) {
