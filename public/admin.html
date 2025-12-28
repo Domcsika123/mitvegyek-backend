@@ -888,7 +888,7 @@
       ref.includes("/partner.html") ||
       ref.includes("/stats.html");
 
-    // ✅ pontos mentés kattintáskor
+    // ✅ kattintáskor azonnali mentés (pontos)
     document.addEventListener("click", (e) => {
       const el = e.target && e.target.closest ? e.target.closest("a,button") : null;
       if (!el) return;
@@ -902,6 +902,7 @@
     // Loginból / direkt megnyitásból: NE restore, mindig teteje
     if (!cameFromSubpage) {
       sessionStorage.removeItem(KEY);
+      try { if ("scrollRestoration" in history) history.scrollRestoration = "manual"; } catch (_) {}
       return;
     }
 
@@ -909,48 +910,51 @@
     const y = saved !== null ? parseInt(saved, 10) : NaN;
     if (Number.isNaN(y)) return;
 
-    // ✅ Böngésző saját scroll restore OFF
-    try {
-      if ("scrollRestoration" in history) history.scrollRestoration = "manual";
-    } catch (_) {}
+    try { if ("scrollRestoration" in history) history.scrollRestoration = "manual"; } catch (_) {}
 
-    // ✅ Ne látszódjon az "ugrálás": rejtsük el, amíg betölt + scroll beáll
     const html = document.documentElement;
-    const prevVis = html.style.visibility;
-    html.style.visibility = "hidden";
 
-    // initAdmin-t "becsomagoljuk": előbb betölt mindent, aztán 1x scroll, majd megjelenít
-    const origInit = window.initAdmin;
+    // ✅ nagyon rövid fade, hogy ne lásd a "teteje -> ugrás" dolgot
+    const prevOpacity = html.style.opacity;
+    const prevTransition = html.style.transition;
 
-    if (typeof origInit === "function") {
-      window.initAdmin = async function (...args) {
-        // biztos ami biztos: ne animáljon a scroll
-        const prevSB = html.style.scrollBehavior;
-        html.style.scrollBehavior = "auto";
+    function show() {
+      html.style.opacity = prevOpacity || "1";
+      html.style.transition = prevTransition || "";
+    }
 
-        try {
-          await origInit.apply(this, args);
-        } finally {
-          // 1 stabil scroll beállítás a végén
-          requestAnimationFrame(() => {
-            window.scrollTo(0, y);
-            requestAnimationFrame(() => {
-              window.scrollTo(0, y);
-              html.style.visibility = prevVis || "visible";
-              html.style.scrollBehavior = prevSB || "";
-            });
-          });
-        }
-      };
-    } else {
-      // fallback (ha valamiért nincs initAdmin): időzített restore + megjelenítés
-      setTimeout(() => {
+    function restoreOnce() {
+      const prevSB = html.style.scrollBehavior;
+      html.style.scrollBehavior = "auto";
+
+      window.scrollTo(0, y);
+      requestAnimationFrame(() => {
         window.scrollTo(0, y);
-        html.style.visibility = prevVis || "visible";
-      }, 700);
+        html.style.scrollBehavior = prevSB || "";
+        show();
+      });
+    }
+
+    // Induláskor azonnal “láthatatlan”, de garantáltan visszajön
+    html.style.transition = "opacity 120ms ease";
+    html.style.opacity = "0";
+
+    // Biztosíték: SOSE marad fehér
+    setTimeout(show, 600);
+
+    const run = () => {
+      // várunk egy picit, hogy a DOM elinduljon (betöltések), aztán 1x restore
+      requestAnimationFrame(() => setTimeout(restoreOnce, 140));
+    };
+
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", run, { once: true });
+    } else {
+      run();
     }
   })();
 </script>
+
 
 
 
