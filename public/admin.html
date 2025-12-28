@@ -168,9 +168,23 @@
     .mv-pill.blocked { background:#fee2e2; color:#991b1b; }
     .mv-pill.active { background:#dcfce7; color:#166534; }
 
-    /* ====== MOBIL FIX (csak mobilon: ne legyen ... és férjen el normálisan) ====== */
+    /* ====== MOBIL FIX v3 + KÖZÉPRE IGAZÍTÁS (nincs vízszintes scroll, kártyás táblázat) ====== */
     @media (max-width: 640px) {
-      .mv-card { padding: 14px 14px; }
+      /* KÖZÉP: a “dobozok” optikailag középen legyenek */
+      body { padding: 14px !important; }
+
+      .mv-container{
+        width: 100% !important;
+        max-width: 520px !important;   /* mobilon szebb keret */
+        margin: 0 auto !important;
+      }
+
+      .mv-card{
+        width: 100% !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        padding: 14px 14px !important;
+      }
 
       /* táblázat -> kártyás lista */
       table { width: 100% !important; border-collapse: separate; border-spacing: 0 10px; table-layout: auto !important; }
@@ -241,7 +255,6 @@
       /* "AKTÍV" badge ne csússzon el */
       .mv-pill { margin-left: 0 !important; margin-top: 6px; }
     }
-
   </style>
 
   <!-- PapaParse a CSV feldolgozáshoz a böngészőben -->
@@ -494,7 +507,6 @@
                 throw new Error(err.error || "Ismeretlen hiba");
               }
 
-              // frissítés
               await loadPartners();
               await loadCatalogs();
             } catch (e) {
@@ -581,7 +593,6 @@
 
           const tdTest = document.createElement("td");
 
-          // ✅ itt a lényeg: a widget teszt link kapja meg az api_key-t is
           const partner = partnersBySiteKey.get(cat.siteKey);
           const apiKey = partner && partner.api_key ? String(partner.api_key) : "";
 
@@ -859,9 +870,6 @@
     }
 
     async function initAdmin() {
-      // Fontos sorrend:
-      // 1) partnerek (api_key map)
-      // 2) katalógusok (widget teszt link api_key-vel)
       await loadPartners();
       await loadCatalogs();
       await loadStatsOverview();
@@ -873,41 +881,38 @@
   </script>
 
   <script>
-  (function () {
-    const KEY = "mv_admin_scroll_y";
+    (function () {
+      const KEY = "mv_admin_scroll_y";
 
-    // ✅ Visszaállítás betöltéskor
-    const saved = sessionStorage.getItem(KEY);
-    if (saved !== null) {
-      const y = parseInt(saved, 10);
-      if (!Number.isNaN(y)) {
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => window.scrollTo(0, y))
-        );
+      const saved = sessionStorage.getItem(KEY);
+      if (saved !== null) {
+        const y = parseInt(saved, 10);
+        if (!Number.isNaN(y)) {
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => window.scrollTo(0, y))
+          );
+        }
       }
-    }
 
-    // ✅ Mentés görgetés közben (kicsit throttlingolva)
-    let ticking = false;
-    window.addEventListener(
-      "scroll",
-      () => {
-        if (ticking) return;
-        ticking = true;
-        setTimeout(() => {
-          ticking = false;
-          sessionStorage.setItem(KEY, String(window.scrollY || 0));
-        }, 150);
-      },
-      { passive: true }
-    );
+      let ticking = false;
+      window.addEventListener(
+        "scroll",
+        () => {
+          if (ticking) return;
+          ticking = true;
+          setTimeout(() => {
+            ticking = false;
+            sessionStorage.setItem(KEY, String(window.scrollY || 0));
+          }, 150);
+        },
+        { passive: true }
+      );
 
-    // ✅ Mentés oldal elhagyásakor is
-    window.addEventListener("pagehide", () => {
-      sessionStorage.setItem(KEY, String(window.scrollY || 0));
-    });
-  })();
-</script>
+      window.addEventListener("pagehide", () => {
+        sessionStorage.setItem(KEY, String(window.scrollY || 0));
+      });
+    })();
+  </script>
 
 </body>
 </html>
