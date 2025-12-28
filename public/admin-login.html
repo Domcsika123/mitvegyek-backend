@@ -103,12 +103,17 @@
         localStorage.setItem("mv_admin_token", data.token);
         setMsg("Sikeres belépés ✔", true);
 
-        window.location.href = "/admin.html";
+        // ✅ maradjon kicsit tovább látható a zöld üzenet
+        setTimeout(() => {
+          window.location.href = "/admin.html";
+        }, 1600);
       } catch (e) {
         setMsg(e.message, false);
       } finally {
-        btn.disabled = false;
+        // ha sikeres volt, úgyis átirányítunk, ne engedjük vissza a gombot
+        if (!msg.classList.contains("ok")) btn.disabled = false;
       }
+
     }
 
     btn.addEventListener("click", login);
