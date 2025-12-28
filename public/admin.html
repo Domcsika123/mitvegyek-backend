@@ -172,30 +172,76 @@
     @media (max-width: 640px) {
       .mv-card { padding: 14px 14px; }
 
-      /* ha széles a táblázat, lehessen oldalra görgetni */
-      table { display: block; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; table-layout: auto; }
+      /* táblázat -> kártyás lista */
+      table { width: 100% !important; border-collapse: separate; border-spacing: 0 10px; table-layout: auto !important; }
+      thead { display: none !important; }
 
-      /* mobilon ne vágjuk le ...-ra, inkább törjük a szöveget */
-      th, td {
+      tbody, tr, td { display: block !important; width: 100% !important; }
+      tr {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 10px 12px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.05);
+        margin: 0;
+      }
+
+      /* cellák: ne legyen ... és ne tördelje betűnként */
+      td {
+        border: none !important;
+        padding: 8px 0 !important;
         white-space: normal !important;
         overflow: visible !important;
         text-overflow: clip !important;
-        word-break: break-word;
+        word-break: break-word !important;
       }
 
-      /* a műveletek gombjai egymás alá kerüljenek és legyenek szélesek */
-      .mv-actions { flex-direction: column; align-items: stretch; }
+      /* címke a cella fölé */
+      td::before{
+        display: block;
+        font-weight: 700;
+        color: #374151;
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+
+      /* ------- CÍMKÉK oszloponként (táblánként) ------- */
+
+      /* Webshop-katalógusok: 3 oszlop */
+      #catalog-table tbody tr td:nth-child(1)::before { content: "site_key"; }
+      #catalog-table tbody tr td:nth-child(2)::before { content: "Termékek száma"; }
+      #catalog-table tbody tr td:nth-child(3)::before { content: "Teszt és műveletek"; }
+
+      /* Partnerek: 2 oszlop */
+      #partner-table tbody tr td:nth-child(1)::before { content: "Név"; }
+      #partner-table tbody tr td:nth-child(2)::before { content: "Műveletek"; }
+
+      /* Statisztika: 2 oszlop */
+      #stats-table tbody tr td:nth-child(1)::before { content: "site_key"; }
+      #stats-table tbody tr td:nth-child(2)::before { content: "Műveletek"; }
+
+      /* gombok mobilon: szélesek, egymás alatt */
+      .mv-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+      }
       .mv-actions .mv-btn,
       .mv-actions .mv-inline-btn,
       .mv-actions .mv-button-link {
         width: 100%;
         box-sizing: border-box;
-        margin-left: 0;
-        margin-right: 0;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
         text-align: center;
         justify-content: center;
       }
+
+      /* "AKTÍV" badge ne csússzon el */
+      .mv-pill { margin-left: 0 !important; margin-top: 6px; }
     }
+
   </style>
 
   <!-- PapaParse a CSV feldolgozáshoz a böngészőben -->
