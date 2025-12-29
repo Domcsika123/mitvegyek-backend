@@ -4,6 +4,7 @@ import { Router } from "express";
 import { listCatalogs, replaceCatalog, deleteCatalog } from "../services/productService";
 import { getAllStats } from "../services/statsService";
 import { Product } from "../models/Product";
+import { embedProductsInBatches } from "../ai/embeddings";
 import {
   createPartner,
   listPartners,
@@ -30,7 +31,7 @@ router.get("/catalogs", (req, res) => {
 });
 
 // POST /api/admin/import-products
-router.post("/import-products", (req, res) => {
+router.post("/import-products", async (req, res) => {
   try {
     const { site_key, items } = req.body || {};
 
@@ -40,7 +41,7 @@ router.post("/import-products", (req, res) => {
         .json({ error: "site_key kötelező és string legyen." });
     }
 
-    // ⬇⬇⬇ ÚJ: ellenőrizzük, hogy létezik-e ilyen partner / site_key
+    // ⬇⬇⬇ ellenőrizzük, hogy létezik-e ilyen partner / site_key
     const partner = findPartnerBySiteKey(site_key);
     if (!partner) {
       return res.status(400).json({
@@ -83,12 +84,30 @@ router.post("/import-products", (req, res) => {
       products.push(p);
     }
 
-    replaceCatalog(site_key, products, true);
+    // ✅ ÚJ: embeddingek legyártása importkor (változó termékszámra batch-ben)
+    // Default batch: 64 (nagy katalógusnál is stabil)
+    const batchSize = Number(process.env.EMBED_BATCH_SIZE || 64) || 64;
+
+    let productsWithEmbeddings: Product[] = [];
+    try {
+      productsWithEmbeddings = await embedProductsInBatches(products, batchSize);
+    } catch (e) {
+      console.error("Embedding generálási hiba importkor:", e);
+      return res.status(500).json({
+        error: "Embedding generálás hiba. Ellenőrizd az OPENAI_API_KEY-t és próbáld újra.",
+      });
+    }
+
+    replaceCatalog(site_key, productsWithEmbeddings, true);
+
+    const embeddedCount = productsWithEmbeddings.filter((p) => Array.isArray(p.embedding)).length;
 
     return res.json({
       ok: true,
       site_key,
-      count: products.length,
+      count: productsWithEmbeddings.length,
+      embedded: embeddedCount,
+      batchSize,
     });
   } catch (err) {
     console.error("Hiba a /api/admin/import-products hívásban:", err);

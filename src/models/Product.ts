@@ -8,4 +8,7 @@ export type Product = {
   image_url?: string;      // opcionális
   product_url?: string;    // termékoldal linkje
   description?: string;    // rövid leírás
+
+  // ✅ ÚJ: importkor töltjük (előre legyártott termék embedding)
+  embedding?: number[];
 };

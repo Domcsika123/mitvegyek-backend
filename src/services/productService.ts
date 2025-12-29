@@ -62,6 +62,9 @@ function loadCatalogFromDisk(siteKey: string): Product[] {
       description: p.description ?? "",
       image_url: p.image_url ?? "",
       product_url: p.product_url ?? "",
+
+      // ✅ ÚJ: embedding megtartása, ha van
+      embedding: Array.isArray(p.embedding) ? p.embedding : undefined,
     }));
 
     console.log(`Betöltött termékek száma [${siteKey}]: ${products.length}`);

@@ -7,7 +7,6 @@ import { Product } from "../models/Product";
 type Embedding = number[];
 
 // --- OpenAI kliens csak valódi API kulccsal ---
-
 if (!process.env.OPENAI_API_KEY) {
   throw new Error("OPENAI_API_KEY hiányzik. Állítsd be a .env fájlban.");
 }
@@ -17,6 +16,13 @@ const openai = new OpenAI({
 });
 
 // --- Segédfüggvények szövegépítéshez ---
+
+function clampText(s: string, maxLen = 600): string {
+  if (!s) return "";
+  const t = String(s).trim();
+  if (t.length <= maxLen) return t;
+  return t.slice(0, maxLen) + "…";
+}
 
 function buildUserProfileText(user: UserContext): string {
   const parts: string[] = [];
@@ -29,7 +35,7 @@ function buildUserProfileText(user: UserContext): string {
   }
   if (user.free_text) parts.push(user.free_text);
 
-  return parts.join(". ");
+  return clampText(parts.join(". "), 800);
 }
 
 function buildProductProfileText(product: Product): string {
@@ -39,7 +45,8 @@ function buildProductProfileText(product: Product): string {
   if (product.category) parts.push(`kategória: ${product.category}`);
   if (product.description) parts.push(product.description);
 
-  return parts.join(". ");
+  // termék szövege legyen rövidebb (token/költség miatt importkor is)
+  return clampText(parts.join(". "), 600);
 }
 
 // --- Koszinusz hasonlóság ---
@@ -63,8 +70,53 @@ function cosineSimilarity(a: Embedding, b: Embedding): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-// --- Publikus: embedding alapú rangsorolás ---
+// --- belső embedding helper ---
 
+async function embedSingle(text: string): Promise<Embedding> {
+  const response = await openai.embeddings.create({
+    model: "text-embedding-3-small",
+    input: text,
+  });
+  return response.data[0].embedding as Embedding;
+}
+
+/**
+ * ✅ IMPORTKOR: termék embeddingek legyártása batch-ben (változó termékszámra jó)
+ * - products: termékek listája
+ * - batchSize: hány terméket küldünk egy API hívásban (default 64)
+ */
+export async function embedProductsInBatches(
+  products: Product[],
+  batchSize = 64
+): Promise<Product[]> {
+  if (!products || products.length === 0) return [];
+
+  const out: Product[] = [];
+
+  for (let i = 0; i < products.length; i += batchSize) {
+    const batch = products.slice(i, i + batchSize);
+    const inputs = batch.map((p) => buildProductProfileText(p));
+
+    const response = await openai.embeddings.create({
+      model: "text-embedding-3-small",
+      input: inputs,
+    });
+
+    for (let j = 0; j < batch.length; j++) {
+      const emb = response.data[j]?.embedding as Embedding | undefined;
+      out.push({
+        ...batch[j],
+        embedding: emb,
+      });
+    }
+  }
+
+  return out;
+}
+
+// --- Publikus: embedding alapú rangsorolás (KERESÉSKOR) ---
+// ✅ Itt már NEM embedeljük újra a termékeket!
+// Csak a user kap 1 embeddinget, a termékeknél a tárolt product.embedding-et használjuk.
 export async function rankProductsWithEmbeddings(
   user: UserContext,
   products: Product[]
@@ -74,23 +126,11 @@ export async function rankProductsWithEmbeddings(
   }
 
   const userText = buildUserProfileText(user);
-  const productTexts = products.map((p) => buildProductProfileText(p));
+  const userEmbedding = await embedSingle(userText);
 
-  const inputs = [userText, ...productTexts];
-
-  const response = await openai.embeddings.create({
-    model: "text-embedding-3-small",
-    input: inputs,
-  });
-
-  const vectors = response.data.map((d) => d.embedding as Embedding);
-
-  const userEmbedding = vectors[0];
-  const productEmbeddings = vectors.slice(1);
-
-  const scored = products.map((product, index) => {
-    const emb = productEmbeddings[index];
-    const score = cosineSimilarity(userEmbedding, emb);
+  const scored = products.map((product) => {
+    const emb = Array.isArray(product.embedding) ? (product.embedding as Embedding) : null;
+    const score = emb ? cosineSimilarity(userEmbedding, emb) : 0;
     return { product, score };
   });
 
