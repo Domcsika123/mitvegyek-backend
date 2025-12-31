@@ -131,8 +131,8 @@
         <div>
           <div class="mv-label">Megengedett domainek (CORS whitelist)</div>
           <div class="mv-small">
-            Írj be hostneveket soronként (pl. <b>shop1.hu</b>, <b>www.shop1.hu</b>, <b>shop1.eu</b>).<br/>
-            Ha üresen hagyod: jelenleg nem tiltunk (kompatibilitás miatt).
+            Írhatsz soronként, vesszővel vagy szóközzel is (pl. <b>shop1.hu</b>, <b>www.shop1.hu</b>, <b>shop1.eu</b>).<br/>
+            Teljes URL is jó (pl. <b>https://shop1.hu/akarmi</b>) — automatikusan hostra tisztítjuk.
           </div>
           <textarea id="domains"></textarea>
           <button id="save-domains-btn" class="mv-btn mv-btn-primary">Domainek mentése</button>
@@ -167,6 +167,59 @@
       const el = document.getElementById("status");
       el.textContent = text || "";
       el.className = "mv-status" + (ok === true ? " mv-status-ok" : ok === false ? " mv-status-error" : "");
+    }
+
+    // ✅ rugalmas domain parsolás + tisztítás (URL/port/path levágás, kisbetű, duplikációk ki)
+    function normalizeDomainToken(token) {
+      let s = String(token || "").trim().toLowerCase();
+      if (!s) return "";
+
+      // ha URL: vágjuk le a protokollt
+      s = s.replace(/^https?:\/\//, "");
+
+      // vágjuk le a path/query/hash részt
+      s = s.split("/")[0].split("?")[0].split("#")[0];
+
+      // vágjuk le a portot (pl. localhost:5173 -> localhost)
+      s = s.split(":")[0];
+
+      // ha valaki véletlenül még mindig üres
+      return s.trim();
+    }
+
+    function parseDomains(raw) {
+      const text = String(raw || "");
+
+      // split: új sor + vessző + whitespace
+      const tokens = text.split(/[\n,\s]+/g).map(normalizeDomainToken).filter(Boolean);
+
+      // duplikációk kiszedése (megtartjuk a sorrendet)
+      const seen = new Set();
+      const out = [];
+      for (const t of tokens) {
+        if (!seen.has(t)) {
+          seen.add(t);
+          out.push(t);
+        }
+      }
+      return out;
+    }
+
+    // ✅ domains "Mentve" üzenet auto-eltüntetés (csak siker esetén)
+    let domainsMsgTimer = null;
+    function setDomainsMsg(text, ok) {
+      const msg = document.getElementById("domains-msg");
+      msg.textContent = text || "";
+      msg.className = "mv-status" + (ok === true ? " mv-status-ok" : ok === false ? " mv-status-error" : "");
+
+      // csak a sikeres üzenetet tüntetjük el pár mp után
+      if (ok === true && text) {
+        if (domainsMsgTimer) clearTimeout(domainsMsgTimer);
+        domainsMsgTimer = setTimeout(() => {
+          msg.textContent = "";
+          msg.className = "mv-status";
+        }, 2000); // <- 2 mp (állítsd 1500-3000 közé)
+      }
     }
 
     async function loadPartner() {
@@ -218,21 +271,18 @@
           }
         };
 
-        // allowed domains textarea
+        // allowed domains textarea (megjelenítés: 1 sor = 1 domain)
         const domains = Array.isArray(p.allowed_domains) ? p.allowed_domains : [];
         document.getElementById("domains").value = domains.join("\n");
 
         // save domains
         document.getElementById("save-domains-btn").onclick = async () => {
-          const msg = document.getElementById("domains-msg");
-          msg.textContent = "";
-          msg.className = "mv-status";
+          setDomainsMsg("", null);
 
           const raw = document.getElementById("domains").value || "";
-          const list = raw
-            .split("\n")
-            .map((s) => s.trim())
-            .filter(Boolean);
+
+          // ✅ itt lett rugalmas: sor/vessző/szóköz/URL mind oké
+          const list = parseDomains(raw);
 
           try {
             const r = await adminFetch(`/api/admin/partners/${encodeURIComponent(siteKey)}/allowed-domains`, {
@@ -244,11 +294,12 @@
             const d = await r.json().catch(() => ({}));
             if (!r.ok) throw new Error(d.error || "Mentés sikertelen.");
 
-            msg.textContent = "Mentve ✔";
-            msg.className = "mv-status mv-status-ok";
+            // opcionális: visszaírjuk szépen soronként, tisztítva
+            document.getElementById("domains").value = list.join("\n");
+
+            setDomainsMsg("Mentve ✔", true);
           } catch (e) {
-            msg.textContent = e.message || "Hiba";
-            msg.className = "mv-status mv-status-error";
+            setDomainsMsg(e.message || "Hiba", false);
           }
         };
 
