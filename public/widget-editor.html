@@ -81,12 +81,13 @@
       .grid2{ grid-template-columns: 1fr; }
     }
 
-    /* ✅ ÚJ: előnézet 2 oszlop (bal felhő, jobb panel) */
+    /* ✅ előnézet 2 oszlop (bal felhő, jobb panel) */
     .previewGrid{
       display:grid;
       grid-template-columns: 360px 1fr;
       gap: 12px;
       margin-top: 12px;
+      align-items: start;
     }
     @media (max-width: 980px){
       .previewGrid{ grid-template-columns: 1fr; }
@@ -178,7 +179,7 @@
     /* ===== Preview keret + scale (megjelenítéshez) ===== */
     .previewWrap{
       position: relative;
-      height: 520px;
+      height: var(--pv-h, 520px); /* ✅ per-preview magasság */
       border-radius: 14px;
       overflow: hidden;
       background: #f8fafc;
@@ -187,6 +188,8 @@
     .previewStage{
       position: absolute;
       transform-origin: top left;
+      left: 0;
+      top: 0;
     }
     .previewStage iframe{
       border: 0;
@@ -202,6 +205,16 @@
     #preview-panel{
       pointer-events: auto !important;
     }
+    /* ✅ finomítás: több hely a panelnek */
+    .previewGrid{
+    grid-template-columns: 300px 1fr; /* 360 helyett */
+    }
+
+    /* ✅ külön magasság a két preview doboznak */
+    .previewWrap--bubble{ height: 320px; }
+    .previewWrap--panel{ height: 640px; }  /* itt lesz nagyobb a panel */
+
+
   </style>
 
   <script>
@@ -750,7 +763,7 @@
       <div class="previewGrid">
         <div>
           <div class="previewBoxTitle">Felhő előnézet</div>
-          <div class="previewWrap" data-vw="520" data-vh="240">
+          <div class="previewWrap previewWrap--bubble" data-vw="520" data-vh="240">
             <div class="previewStage">
               <iframe id="preview-bubble" title="Bubble preview" scrolling="no"></iframe>
             </div>
@@ -759,7 +772,8 @@
 
         <div>
           <div class="previewBoxTitle">Panel előnézet (nyitva)</div>
-          <div class="previewWrap" data-vw="1200" data-vh="760">
+          <!-- ✅ magasabb + a "virtuális" méretet úgy állítjuk, hogy nagyobbnak hasson -->
+          <div class="previewWrap previewWrap--panel" data-vw="900" data-vh="760">
             <div class="previewStage">
               <iframe id="preview-panel" title="Panel preview" scrolling="no"></iframe>
             </div>
@@ -784,6 +798,7 @@
       const W = wrap.clientWidth;
       const H = wrap.clientHeight;
 
+      // ✅ engedjük 1 fölé is (nagyítás), de mindig arányosan
       const scale = Math.min(W / vw, H / vh);
 
       const left = Math.max(0, (W - vw * scale) / 2);

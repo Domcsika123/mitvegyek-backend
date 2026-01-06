@@ -727,26 +727,26 @@
       .mv-widget-status-ok { color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0; }
 
       @media (max-width: 768px), (pointer: coarse) {
-        .mv-widget-root{
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-root{
           right: calc(8px + env(safe-area-inset-right)) !important;
           bottom: calc(8px + env(safe-area-inset-bottom)) !important;
         }
 
-        .mv-widget-bubble-btn{
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-bubble-btn{
           --mv-scale: 0.75 !important;
         }
 
-        .mv-widget-bubble-text{
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-bubble-text{
           font-size: 40px !important;
           padding: 54px 120px !important;
           line-height: 1.08 !important;
         }
-        .mv-widget-bubble-text span{
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-bubble-text span{
           -webkit-line-clamp: 2 !important;
           max-width: 720px !important;
         }
 
-        .mv-widget-panel {
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-panel {
           inset: 0 !important;
           width: 100vw !important;
           height: 100vh !important;
@@ -764,21 +764,21 @@
           font-size: 36px !important;
         }
 
-        .mv-widget-panel-header {
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-panel-header {
           padding-top: calc(34px + env(safe-area-inset-top)) !important;
           padding-left: calc(30px + env(safe-area-inset-left)) !important;
           padding-right: calc(30px + env(safe-area-inset-right)) !important;
           padding-bottom: 30px !important;
         }
 
-        .mv-widget-close-btn{
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-close-btn{
           width: 64px !important;
           height: 64px !important;
           border-radius: 20px !important;
           font-size: 36px !important;
         }
 
-        .mv-widget-body {
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-body {
           padding: 36px 30px 36px 30px !important;
           overflow-y: auto !important;
           -webkit-overflow-scrolling: touch;
@@ -787,43 +787,45 @@
           gap: 22px !important;
         }
 
-        .mv-widget-submit-section {
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-submit-section {
           padding-left: calc(30px + env(safe-area-inset-left)) !important;
           padding-right: calc(30px + env(safe-area-inset-right)) !important;
           padding-bottom: calc(30px + env(safe-area-inset-bottom)) !important;
           padding-top: 28px !important;
         }
 
-        .mv-widget-input-group {
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-input-group {
           flex-direction: column !important;
           gap: 24px !important;
           margin-bottom: 20px !important;
         }
-        .mv-widget-form-field { width: 100% !important; flex: 0 0 auto !important; }
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-form-field { width: 100% !important; flex: 0 0 auto !important; }
 
-        .mv-widget-panel-title { font-size: 56px !important; }
-        .mv-widget-panel-subtitle { font-size: 34px !important; }
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-panel-title { font-size: 56px !important; }
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-panel-subtitle { font-size: 34px !important; }
 
-        .mv-widget-section-label {
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-section-label {
           font-size: 32px !important;
           margin-bottom: 20px !important;
         }
-        .mv-widget-field-label {
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-field-label {
           font-size: 30px !important;
           margin-bottom: 14px !important;
         }
 
-        .mv-widget-input, .mv-widget-select, .mv-widget-textarea {
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-input,
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-select,
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-textarea {
           font-size: 38px !important;
           padding: 28px 24px !important;
           border-radius: 26px !important;
         }
-        .mv-widget-textarea {
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-textarea {
           min-height: 220px !important;
           line-height: 1.6 !important;
         }
 
-        .mv-widget-results-title {
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-results-title {
           font-size: 38px !important;
           padding: 22px 22px !important;
           border-radius: 20px !important;
@@ -831,28 +833,29 @@
           margin-bottom: 22px !important;
         }
 
-        .mv-widget-result-item {
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-result-item {
           grid-template-columns: 1fr !important;
           gap: 20px !important;
           padding: 28px !important;
           border-radius: 30px !important;
         }
-        .mv-widget-result-media {
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-result-media {
           width: 100% !important;
           height: 340px !important;
           border-radius: 26px !important;
         }
-        .mv-widget-result-name { font-size: 40px !important; white-space: normal !important; }
-        .mv-widget-result-price { font-size: 34px !important; }
-        .mv-widget-result-reason { font-size: 30px !important; -webkit-line-clamp: 10 !important; }
-        .mv-widget-result-link { font-size: 34px !important; padding: 22px 28px !important; border-radius: 22px !important; }
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-result-name { font-size: 40px !important; white-space: normal !important; }
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-result-price { font-size: 34px !important; }
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-result-reason { font-size: 30px !important; -webkit-line-clamp: 10 !important; }
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-result-link { font-size: 34px !important; padding: 22px 28px !important; border-radius: 22px !important; }
 
-        .mv-widget-submit-btn { font-size: 38px !important; padding: 30px !important; border-radius: 30px !important; }
-        .mv-widget-reset-btn { font-size: 34px !important; padding: 26px !important; border-radius: 26px !important; }
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-submit-btn { font-size: 38px !important; padding: 30px !important; border-radius: 30px !important; }
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-reset-btn { font-size: 34px !important; padding: 26px !important; border-radius: 26px !important; }
 
-        .mv-widget-help-text { font-size: 26px !important; }
-        .mv-widget-status { font-size: 30px !important; padding: 22px 22px !important; border-radius: 20px !important; }
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-help-text { font-size: 26px !important; }
+        html:not(.mv-preview-panel):not(.mv-preview-bubble) .mv-widget-status { font-size: 30px !important; padding: 22px 22px !important; border-radius: 20px !important; }
       }
+
 
       /* ===== PREVIEW MÓD (csak szerkesztőhöz) ===== */
 
@@ -879,9 +882,28 @@
         transform: translate(-50%, -50%) scale(var(--mv-scale)) !important;
       }
 
-      /* panel preview: SEMMI átméretezés! csak: felhő rejtve, close tiltva */
+      /* ✅ panel preview: KÖZÉPRE + NAGYOBB (csak preview-ban), felhő rejtve, close tiltva */
       .mv-preview-panel .mv-widget-bubble-btn{ display:none !important; }
-      .mv-preview-panel .mv-widget-panel{ display:flex !important; }
+
+      .mv-preview-panel .mv-widget-panel{
+        display:flex !important;
+
+        right: auto !important;
+        bottom: auto !important;
+        left: 50% !important;
+        top: 50% !important;
+
+        /* hagyjuk a normál desktop méretet */
+        width: 420px !important;
+        max-width: calc(100vw - 40px) !important;
+        max-height: calc(100vh - 40px) !important;
+
+        transform: translate(-50%, -50%) !important;
+        transform-origin: center !important;
+
+        animation: none !important;
+      }
+
 
       .mv-preview-panel .mv-widget-close-btn{
         pointer-events: none !important;
