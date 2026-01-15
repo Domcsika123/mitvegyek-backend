@@ -301,15 +301,34 @@
       box-shadow:0 0 0 1px #2563eb33;
     }
 
-    .mv-code{
-      font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
-      font-size:12px;
-      background:#111827;
-      color:#e5e7eb;
-      padding:3px 6px;
-      border-radius:6px;
-      white-space:normal;
-      word-break:break-all;
+    .mv-autocomplete-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      width: 100%;
+      background: white;
+      border: 1px solid #d1d5db;
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 10;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    .mv-autocomplete-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 13px;
+      border-bottom: 1px solid #f3f4f6;
+    }
+
+    .mv-autocomplete-item:hover {
+      background: #f9fafb;
+    }
+
+    .mv-autocomplete-item:last-child {
+      border-bottom: none;
     }
 
     /* ====== MOBIL FIX v3 ====== */
@@ -812,9 +831,10 @@
         </p>
 
         <div class="mv-input-row">
-          <div class="mv-input-group" style="max-width: 220px;">
+          <div class="mv-input-group" style="max-width: 220px; position: relative;">
             <label for="csv-site-key">site_key</label>
-            <input id="csv-site-key" type="text" />
+            <input id="csv-site-key" type="text" autocomplete="off" />
+            <div id="csv-site-key-dropdown" class="mv-autocomplete-dropdown" style="display: none;"></div>
           </div>
         </div>
 
@@ -1483,9 +1503,53 @@
     }
 
     function setupCsvImport() {
+      const siteKeyInput = safeGet("csv-site-key");
+      const dropdown = safeGet("csv-site-key-dropdown");
       const btn = safeGet("csv-import-btn");
       const statusEl = safeGet("csv-status");
       if (!btn) return;
+
+      // ✅ Autocomplete handler
+      if (siteKeyInput && dropdown) {
+        siteKeyInput.addEventListener("input", () => {
+          const query = (siteKeyInput.value || "").toLowerCase().trim();
+          dropdown.innerHTML = "";
+
+          if (!query) {
+            dropdown.style.display = "none";
+            return;
+          }
+
+          const filtered = Array.from(validSiteKeys).filter(sk => 
+            sk.toLowerCase().includes(query)
+          );
+
+          if (filtered.length === 0) {
+            dropdown.style.display = "none";
+            return;
+          }
+
+          filtered.forEach(sk => {
+            const item = document.createElement("div");
+            item.className = "mv-autocomplete-item";
+            item.textContent = sk;
+            item.addEventListener("click", () => {
+              siteKeyInput.value = sk;
+              dropdown.style.display = "none";
+            });
+            dropdown.appendChild(item);
+          });
+
+          dropdown.style.display = "block";
+        });
+
+        // ✅ Dropdown elrejtése kattintáskor máshol
+        document.addEventListener("click", (e) => {
+          if (e.target !== siteKeyInput && !dropdown.contains(e.target)) {
+            dropdown.style.display = "none";
+          }
+        });
+      }
 
       btn.addEventListener("click", () => {
         const siteKeyInput = safeGet("csv-site-key");
