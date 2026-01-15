@@ -127,7 +127,7 @@
     .mv-btn-danger { background: #dc2626; color: white; }
     .mv-btn-danger:hover { background: #b91c1c; }
 
-    .mv-status { margin-top: 8px; font-size: 13px; }
+    .mv-status { margin: 0; font-size: 13px; display: inline-flex; align-items: center; white-space: nowrap; }
     .mv-status-ok { color: #166534; }
     .mv-status-error { color: #b91c1c; }
 
@@ -878,8 +878,10 @@
           </div>
         </div>
 
-        <button id="csv-import-btn" class="mv-btn mv-btn-primary">CSV importálása</button>
-        <div id="csv-status" class="mv-status"></div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-top: 8px;">
+          <button id="csv-import-btn" class="mv-btn mv-btn-primary" style="margin-top: 0; margin-right: 0;">CSV importálása</button>
+          <div id="csv-status" class="mv-status"></div>
+        </div>
       </div>
     </div>
 
@@ -895,8 +897,10 @@
           </div>
         </div>
 
-        <button id="partner-create-btn" class="mv-btn mv-btn-primary">Új partner létrehozása</button>
-        <div id="partner-status" class="mv-status"></div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-top: 8px;">
+          <button id="partner-create-btn" class="mv-btn mv-btn-primary" style="margin-top: 0; margin-right: 0;">Új partner létrehozása</button>
+          <div id="partner-status" class="mv-status"></div>
+        </div>
 
         <h3 style="margin-top: 18px;">Partnerek listája</h3>
 

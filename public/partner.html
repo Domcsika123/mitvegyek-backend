@@ -51,7 +51,7 @@
     .mv-btn-secondary { background: #e5e7eb; color: #111827; }
     .mv-btn-secondary:hover { background: #d1d5db; }
 
-    .mv-status { margin-top: 8px; font-size: 13px; }
+    .mv-status { font-size: 13px; margin: 0; white-space: nowrap; }
     .mv-status-error { color: #b91c1c; }
     .mv-status-ok { color: #166534; }
 
@@ -141,8 +141,10 @@
           </div>
 
           <textarea id="domains"></textarea>
-          <button id="save-domains-btn" class="mv-btn mv-btn-primary">Domainek mentése</button>
-          <div id="domains-msg" class="mv-status"></div>
+          <div style="display: flex; align-items: center; gap: 12px; margin-top: 8px;">
+            <button id="save-domains-btn" class="mv-btn mv-btn-primary" style="margin-top: 0; margin-right: 0;">Domainek mentése</button>
+            <div id="domains-msg" class="mv-status"></div>
+          </div>
         </div>
 
         <div>
