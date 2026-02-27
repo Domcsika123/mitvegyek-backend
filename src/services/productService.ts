@@ -63,7 +63,12 @@ function loadCatalogFromDisk(siteKey: string): Product[] {
       image_url: p.image_url ?? "",
       product_url: p.product_url ?? "",
 
-      // ✅ ÚJ: embedding megtartása, ha van
+      // Shopify / CSV extra mezők
+      tags: p.tags ?? undefined,
+      product_type: p.product_type ?? undefined,
+      vendor: p.vendor ?? undefined,
+
+      // Embedding megtartása, ha van
       embedding: Array.isArray(p.embedding) ? p.embedding : undefined,
     }));
 

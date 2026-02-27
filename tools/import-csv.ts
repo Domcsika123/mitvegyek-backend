@@ -59,6 +59,10 @@ async function main() {
   const descriptionCol = getArgValue("--description", false);
   const urlCol = getArgValue("--url", false);
   const imageCol = getArgValue("--image", false);
+  // ✅ Shopify extra mezők (fashion attribute matching-hez)
+  const tagsCol = getArgValue("--tags", false);
+  const productTypeCol = getArgValue("--product_type", false);
+  const vendorCol = getArgValue("--vendor", false);
 
   const host = getArgValue("--host", false) || "http://localhost:3001";
 
@@ -98,18 +102,50 @@ async function main() {
 
   console.log("Beolvasott sorok száma a CSV-ben:", records.length);
 
+
   const items: any[] = [];
   let skipped = 0;
+  const seenNames = new Set<string>();
+
+  function extractColor(name: string, tags: string): string | undefined {
+    // Egyszerű szín detektálás név vagy tag alapján
+    const COLORS = [
+      "black", "white", "red", "blue", "green", "yellow", "pink", "purple", "grey", "gray", "sand", "mocha", "beige", "brown", "orange", "gold", "silver", "washed", "nature", "dollar green"
+    ];
+    const lower = (name + " " + tags).toLowerCase();
+    return COLORS.find(c => lower.includes(c));
+  }
+
+  function extractStyle(name: string, tags: string): string | undefined {
+    // Egyszerű stílus detektálás
+    const STYLES = ["oversized", "loose", "fit", "vintage", "modern", "classic", "premium", "street", "unisex"];
+    const lower = (name + " " + tags).toLowerCase();
+    return STYLES.find(s => lower.includes(s));
+  }
+
+  function extractType(name: string, tags: string, product_type: string): string | undefined {
+    // Egyszerű fazon/típus detektálás
+    const TYPES = ["tee", "t-shirt", "hoodie", "pants", "canvas", "bag", "cap", "jacket", "sneaker", "shirt", "pullover", "shorts"];
+    const lower = (name + " " + tags + " " + product_type).toLowerCase();
+    return TYPES.find(t => lower.includes(t));
+  }
 
   for (const row of records) {
     const product_id = (row[idCol] || "").toString().trim();
-    const name = (row[nameCol] || "").toString().trim();
+    let name = (row[nameCol] || "").toString().trim();
     const priceRaw = row[priceCol];
 
     if (!product_id || !name) {
       skipped++;
       continue;
     }
+
+    // Deduplication: remove size/variant info from name for uniqueness
+    let dedupName = name.replace(/\b(XS|S|M|L|XL|XXL|XXXL|[0-9]+ ?cm|\d+ ?x ?\d+ ?cm|\d+ ?-? ?pack|\[[^\]]+\]|\([^)]+\))\b/gi, "").replace(/\s+/g, " ").trim().toLowerCase();
+    if (seenNames.has(dedupName)) {
+      continue;
+    }
+    seenNames.add(dedupName);
 
     const price = parsePrice(priceRaw as string);
 
@@ -125,6 +161,11 @@ async function main() {
 
     const image_url = imageCol ? (row[imageCol] || "").toString().trim() : "";
 
+    // Extra mezők Shopify importhoz (fashion attribute matching)
+    const tags = tagsCol ? (row[tagsCol] || "").toString().trim() : "";
+    const product_type = productTypeCol ? (row[productTypeCol] || "").toString().trim() : "";
+    const vendor = vendorCol ? (row[vendorCol] || "").toString().trim() : "";
+
     items.push({
       product_id,
       name,
@@ -133,6 +174,9 @@ async function main() {
       description,
       product_url: product_url || undefined,
       image_url: image_url || undefined,
+      tags: tags || undefined,
+      product_type: product_type || undefined,
+      vendor: vendor || undefined,
     });
   }
 

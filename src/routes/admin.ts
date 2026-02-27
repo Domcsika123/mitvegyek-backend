@@ -13,11 +13,31 @@ import {
   setPartnerBlocked,
   setPartnerAllowedDomains,
   rotatePartnerApiKey,
-  // ✅ ÚJ: widget config
+  // ✅ Widget config
   getPartnerWidgetConfig,
   setPartnerWidgetConfig,
   clearPartnerWidgetConfig,
+  // ✅ Widget copy + fields (boltonként testreszabható)
+  getPartnerWidgetCopy,
+  setPartnerWidgetCopy,
+  getPartnerWidgetFields,
+  setPartnerWidgetFields,
+  // ✅ Relevance + widget schema (fashion preset)
+  getPartnerRelevance,
+  setPartnerRelevance,
+  getPartnerWidgetSchema,
+  setPartnerWidgetSchema,
+  applyFashionPreset,
+  getDefaultFashionSchema,
 } from "../services/partnerService";
+import {
+  getFullWidgetConfig,
+  saveFullWidgetConfig,
+  resetFullWidgetConfig,
+  applyPreset,
+  listPresets,
+} from "../services/widgetConfigService";
+import { PresetName } from "../config/widgetConfig";
 
 const router = Router();
 
@@ -63,6 +83,10 @@ router.post("/import-products", async (req, res) => {
         description: String(raw.description || "").trim(),
         image_url: raw.image_url ? String(raw.image_url) : undefined,
         product_url: raw.product_url ? String(raw.product_url) : undefined,
+        // ✅ Shopify extra mezők (fashion attribute matching-hez)
+        tags: raw.tags ? String(raw.tags) : undefined,
+        product_type: raw.product_type ? String(raw.product_type) : undefined,
+        vendor: raw.vendor ? String(raw.vendor) : undefined,
       };
 
       if (!p.product_id || !p.name) {
@@ -304,6 +328,267 @@ router.post("/widget-config/:site_key/reset", (req, res) => {
   } catch (err) {
     console.error("Hiba a /api/admin/widget-config/:site_key/reset (POST) hívásban:", err);
     return res.status(500).json({ error: "Hiba történt a widget config reset során." });
+  }
+});
+
+/* ---------- ✅ BEJELENTÉSEK / FEEDBACK (ADMIN) ---------- */
+
+// ✅ widget_copy lekérés + mentés (boltonként testreszabható szövegek)
+router.get("/widget-copy/:site_key", (req, res) => {
+  try {
+    const { site_key } = req.params;
+    if (!site_key) return res.status(400).json({ error: "Hiányzik a site_key paraméter." });
+
+    const partner = findPartnerBySiteKey(site_key);
+    if (!partner) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    const widget_copy = getPartnerWidgetCopy(site_key);
+    const widget_fields = getPartnerWidgetFields(site_key);
+    return res.json({ ok: true, site_key, widget_copy, widget_fields });
+  } catch (err) {
+    console.error("Hiba a /api/admin/widget-copy/:site_key (GET) hívásban:", err);
+    return res.status(500).json({ error: "Hiba történt a widget copy lekérésekor." });
+  }
+});
+
+router.post("/widget-copy/:site_key", (req, res) => {
+  try {
+    const { site_key } = req.params;
+    if (!site_key) return res.status(400).json({ error: "Hiányzik a site_key paraméter." });
+
+    const partner = findPartnerBySiteKey(site_key);
+    if (!partner) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    const { widget_copy, widget_fields } = req.body || {};
+
+    if (widget_copy !== undefined) {
+      setPartnerWidgetCopy(site_key, widget_copy);
+    }
+    if (widget_fields !== undefined) {
+      setPartnerWidgetFields(site_key, widget_fields);
+    }
+
+    const updatedCopy = getPartnerWidgetCopy(site_key);
+    const updatedFields = getPartnerWidgetFields(site_key);
+
+    return res.json({ ok: true, site_key, widget_copy: updatedCopy, widget_fields: updatedFields });
+  } catch (err) {
+    console.error("Hiba a /api/admin/widget-copy/:site_key (POST) hívásban:", err);
+    return res.status(500).json({ error: "Hiba történt a widget copy mentésekor." });
+  }
+});
+
+/* ---------- ✅ RELEVANCE SETTINGS (ADMIN) ---------- */
+
+router.get("/relevance/:site_key", (req, res) => {
+  try {
+    const { site_key } = req.params;
+    if (!site_key) return res.status(400).json({ error: "Hiányzik a site_key paraméter." });
+
+    const partner = findPartnerBySiteKey(site_key);
+    if (!partner) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    const relevance = getPartnerRelevance(site_key);
+    return res.json({ ok: true, site_key, relevance });
+  } catch (err) {
+    console.error("Hiba a /api/admin/relevance/:site_key (GET) hívásban:", err);
+    return res.status(500).json({ error: "Hiba történt a relevance lekérésekor." });
+  }
+});
+
+router.post("/relevance/:site_key", (req, res) => {
+  try {
+    const { site_key } = req.params;
+    if (!site_key) return res.status(400).json({ error: "Hiányzik a site_key paraméter." });
+
+    const partner = findPartnerBySiteKey(site_key);
+    if (!partner) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    const { relevance } = req.body || {};
+    const updated = setPartnerRelevance(site_key, relevance);
+    if (!updated) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    const updatedRelevance = getPartnerRelevance(site_key);
+    return res.json({ ok: true, site_key, relevance: updatedRelevance });
+  } catch (err) {
+    console.error("Hiba a /api/admin/relevance/:site_key (POST) hívásban:", err);
+    return res.status(500).json({ error: "Hiba történt a relevance mentésekor." });
+  }
+});
+
+/* ---------- ✅ WIDGET SCHEMA / FASHION PRESET (ADMIN) ---------- */
+
+router.get("/widget-schema/:site_key", (req, res) => {
+  try {
+    const { site_key } = req.params;
+    if (!site_key) return res.status(400).json({ error: "Hiányzik a site_key paraméter." });
+
+    const partner = findPartnerBySiteKey(site_key);
+    if (!partner) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    const widget_schema = getPartnerWidgetSchema(site_key);
+    const relevance = getPartnerRelevance(site_key);
+    return res.json({ ok: true, site_key, widget_schema, relevance });
+  } catch (err) {
+    console.error("Hiba a /api/admin/widget-schema/:site_key (GET) hívásban:", err);
+    return res.status(500).json({ error: "Hiba történt a widget schema lekérésekor." });
+  }
+});
+
+router.post("/widget-schema/:site_key", (req, res) => {
+  try {
+    const { site_key } = req.params;
+    if (!site_key) return res.status(400).json({ error: "Hiányzik a site_key paraméter." });
+
+    const partner = findPartnerBySiteKey(site_key);
+    if (!partner) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    const { widget_schema } = req.body || {};
+    const updated = setPartnerWidgetSchema(site_key, widget_schema);
+    if (!updated) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    const updatedSchema = getPartnerWidgetSchema(site_key);
+    return res.json({ ok: true, site_key, widget_schema: updatedSchema });
+  } catch (err) {
+    console.error("Hiba a /api/admin/widget-schema/:site_key (POST) hívásban:", err);
+    return res.status(500).json({ error: "Hiba történt a widget schema mentésekor." });
+  }
+});
+
+/** ✅ Fashion preset alkalmazása egyetlen kattintással */
+router.post("/apply-fashion-preset/:site_key", (req, res) => {
+  try {
+    const { site_key } = req.params;
+    if (!site_key) return res.status(400).json({ error: "Hiányzik a site_key paraméter." });
+
+    const partner = findPartnerBySiteKey(site_key);
+    if (!partner) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    const updated = applyFashionPreset(site_key);
+    if (!updated) return res.status(500).json({ error: "Hiba a preset alkalmazásakor." });
+
+    const widget_schema = getPartnerWidgetSchema(site_key);
+    const relevance = getPartnerRelevance(site_key);
+    const widget_copy = getPartnerWidgetCopy(site_key);
+    const widget_fields = getPartnerWidgetFields(site_key);
+
+    return res.json({
+      ok: true,
+      site_key,
+      widget_schema,
+      relevance,
+      widget_copy,
+      widget_fields,
+      message: "Fashion preset sikeresen alkalmazva!",
+    });
+  } catch (err) {
+    console.error("Hiba a /api/admin/apply-fashion-preset/:site_key hívásban:", err);
+    return res.status(500).json({ error: "Hiba történt a fashion preset alkalmazásakor." });
+  }
+});
+
+/** ✅ Default fashion schema lekérése (admin UI-hoz) */
+router.get("/fashion-preset-defaults", (req, res) => {
+  try {
+    const defaults = getDefaultFashionSchema();
+    return res.json({ ok: true, defaults });
+  } catch (err) {
+    console.error("Hiba a /api/admin/fashion-preset-defaults hívásban:", err);
+    return res.status(500).json({ error: "Hiba történt." });
+  }
+});
+
+/* ---------- ✅ V2: FULL WIDGET CONFIG (SCHEMA-DRIVEN) ---------- */
+
+/** Lekérés */
+router.get("/full-widget-config/:site_key", (req, res) => {
+  try {
+    const { site_key } = req.params;
+    if (!site_key) return res.status(400).json({ error: "Hiányzik a site_key paraméter." });
+
+    const partner = findPartnerBySiteKey(site_key);
+    if (!partner) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    const config = getFullWidgetConfig(site_key);
+    return res.json({ ok: true, site_key, config });
+  } catch (err) {
+    console.error("Hiba a /api/admin/full-widget-config/:site_key (GET) hívásban:", err);
+    return res.status(500).json({ error: "Hiba történt a widget config lekérésekor." });
+  }
+});
+
+/** Mentés */
+router.post("/full-widget-config/:site_key", (req, res) => {
+  try {
+    const { site_key } = req.params;
+    if (!site_key) return res.status(400).json({ error: "Hiányzik a site_key paraméter." });
+
+    const partner = findPartnerBySiteKey(site_key);
+    if (!partner) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    const { config } = req.body || {};
+    const saved = saveFullWidgetConfig(site_key, config);
+
+    if (!saved) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    return res.json({ ok: true, site_key, config: saved });
+  } catch (err) {
+    console.error("Hiba a /api/admin/full-widget-config/:site_key (POST) hívásban:", err);
+    return res.status(500).json({ error: "Hiba történt a widget config mentésekor." });
+  }
+});
+
+/** Reset */
+router.post("/full-widget-config/:site_key/reset", (req, res) => {
+  try {
+    const { site_key } = req.params;
+    if (!site_key) return res.status(400).json({ error: "Hiányzik a site_key paraméter." });
+
+    const partner = findPartnerBySiteKey(site_key);
+    if (!partner) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    const config = resetFullWidgetConfig(site_key);
+    if (!config) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    return res.json({ ok: true, site_key, config });
+  } catch (err) {
+    console.error("Hiba a /api/admin/full-widget-config/:site_key/reset (POST) hívásban:", err);
+    return res.status(500).json({ error: "Hiba történt a widget config reset során." });
+  }
+});
+
+/** Preset alkalmazása */
+router.post("/full-widget-config/:site_key/apply-preset", (req, res) => {
+  try {
+    const { site_key } = req.params;
+    if (!site_key) return res.status(400).json({ error: "Hiányzik a site_key paraméter." });
+
+    const partner = findPartnerBySiteKey(site_key);
+    if (!partner) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    const { preset } = req.body || {};
+    const validPresets: PresetName[] = ["generic", "fashion", "electronics", "gift"];
+    if (!validPresets.includes(preset)) {
+      return res.status(400).json({ error: "Érvénytelen preset: " + preset });
+    }
+
+    const config = applyPreset(site_key, preset);
+    if (!config) return res.status(404).json({ error: "Nincs ilyen partner." });
+
+    return res.json({ ok: true, site_key, preset, config });
+  } catch (err) {
+    console.error("Hiba a /api/admin/full-widget-config/:site_key/apply-preset hívásban:", err);
+    return res.status(500).json({ error: "Hiba történt a preset alkalmazásakor." });
+  }
+});
+
+/** Elérhető presetek listázása */
+router.get("/widget-presets", (req, res) => {
+  try {
+    const presets = listPresets();
+    return res.json({ ok: true, presets });
+  } catch (err) {
+    return res.status(500).json({ error: "Hiba történt." });
   }
 });
 

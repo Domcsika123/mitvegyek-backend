@@ -3,6 +3,7 @@
 import OpenAI from "openai";
 import { UserContext } from "../models/UserContext";
 import { Product } from "../models/Product";
+import { normalizeHuQuery } from "./queryUtils";
 
 type Embedding = number[];
 
@@ -27,15 +28,53 @@ function clampText(s: string, maxLen = 600): string {
 function buildUserProfileText(user: UserContext): string {
   const parts: string[] = [];
 
-  if (user.age) parts.push(`${user.age} éves`);
-  if (user.gender && user.gender !== "unknown") parts.push(`nem: ${user.gender}`);
-  if (user.relationship) parts.push(`kapcsolat: ${user.relationship}`);
-  if (user.interests && user.interests.length > 0) {
-    parts.push(`érdeklődés: ${user.interests.join(", ")}`);
+  // Szabad szöveges kérés elsőbbséget kap — a legrelevánsabb információ
+  if (user.free_text) {
+    parts.push(normalizeHuQuery(user.free_text));
   }
-  if (user.free_text) parts.push(user.free_text);
 
-  return clampText(parts.join(". "), 800);
+  // Érdeklődési körök: normalizálva és súlyozottan
+  if (user.interests && user.interests.length > 0) {
+    const normalizedInterests = user.interests.map((i) => normalizeHuQuery(i));
+    parts.push(`érdeklődés: ${normalizedInterests.join(", ")}`);
+  }
+
+  // Kapcsolat kontextus — ajándék-célzott kereséshez kritikus
+  if (user.relationship) {
+    const relMap: Record<string, string> = {
+      partner: "romantikus partner, szerelmes ajándék",
+      barát: "barátnak szóló ajándék, baráti gesztus",
+      szülő: "szülőnek szóló ajándék, családi",
+      testvér: "testvérnek szóló ajándék",
+      kolléga: "munkatársnak szóló ajándék, professzionális",
+      gyerek: "gyereknek szóló ajándék, játékos",
+      nagyszülő: "nagyszülőnek szóló ajándék, praktikus",
+    };
+    const enriched = relMap[user.relationship.toLowerCase()] || user.relationship;
+    parts.push(`ajándék: ${enriched}`);
+  }
+
+  // Demográfia: kor és nem finomítja a szemantikus keresést
+  if (user.age) {
+    if (user.age < 18) parts.push("fiatal, tinédzser");
+    else if (user.age < 30) parts.push("fiatal felnőtt");
+    else if (user.age < 50) parts.push("középkorú felnőtt");
+    else parts.push("idősebb korosztály");
+  }
+  if (user.gender && user.gender !== "unknown") {
+    parts.push(`nem: ${user.gender === "male" ? "férfi" : user.gender === "female" ? "női" : user.gender}`);
+  }
+
+  // Budget kontextus — segíti az árszegmens megtalálását
+  if (user.budget_max && user.budget_max < 5000) {
+    parts.push("olcsó, alacsony árkategória");
+  } else if (user.budget_max && user.budget_max < 15000) {
+    parts.push("közepes árkategória");
+  } else if (user.budget_min && user.budget_min > 20000) {
+    parts.push("prémium, magas árkategória");
+  }
+
+  return clampText(parts.join(". "), 1000);
 }
 
 function buildProductProfileText(product: Product): string {
@@ -44,6 +83,10 @@ function buildProductProfileText(product: Product): string {
   if (product.name) parts.push(product.name);
   if (product.category) parts.push(`kategória: ${product.category}`);
   if (product.description) parts.push(product.description);
+  // ✅ Shopify extra mezők az embeddingbe (jobb fashion matching)
+  if ((product as any).tags) parts.push(`tags: ${(product as any).tags}`);
+  if ((product as any).product_type) parts.push(`típus: ${(product as any).product_type}`);
+  if ((product as any).vendor) parts.push(`márka: ${(product as any).vendor}`);
 
   // termék szövege legyen rövidebb (token/költség miatt importkor is)
   return clampText(parts.join(". "), 600);
@@ -72,16 +115,43 @@ function cosineSimilarity(a: Embedding, b: Embedding): number {
 
 // --- belső embedding helper ---
 
-async function embedSingle(text: string): Promise<Embedding> {
+/** LRU cache for user query embeddings (avoids repeated OpenAI API calls) */
+const embedCache = new Map<string, Embedding>();
+
+/** Az embedding modellt a termékek dimenziója alapján választjuk ki automatikusan. */
+function detectEmbedModel(products: Product[]): string {
+  for (const p of products) {
+    if (Array.isArray(p.embedding) && p.embedding.length > 0) {
+      return p.embedding.length >= 3072 ? "text-embedding-3-large" : "text-embedding-3-small";
+    }
+  }
+  return "text-embedding-3-large";
+}
+
+async function embedSingle(text: string, model = "text-embedding-3-large"): Promise<Embedding> {
+  // Simple LRU cache for user query embeddings (avoids repeated API calls)
+  const cacheKey = `${model}::${text}`;
+  const cached = embedCache.get(cacheKey);
+  if (cached) return cached;
+
   const response = await openai.embeddings.create({
-    model: "text-embedding-3-small",
+    model,
     input: text,
   });
-  return response.data[0].embedding as Embedding;
+  const emb = response.data[0].embedding as Embedding;
+
+  // Cache with max 200 entries
+  if (embedCache.size >= 200) {
+    const firstKey = embedCache.keys().next().value;
+    if (firstKey !== undefined) embedCache.delete(firstKey);
+  }
+  embedCache.set(cacheKey, emb);
+
+  return emb;
 }
 
 /**
- * ✅ IMPORTKOR: termék embeddingek legyártása batch-ben (változó termékszámra jó)
+ * ✅ IMPORTKOR: termék embeddingek legyártása batch-ben (text-embedding-3-large)
  * - products: termékek listája
  * - batchSize: hány terméket küldünk egy API hívásban (default 64)
  */
@@ -98,7 +168,7 @@ export async function embedProductsInBatches(
     const inputs = batch.map((p) => buildProductProfileText(p));
 
     const response = await openai.embeddings.create({
-      model: "text-embedding-3-small",
+      model: "text-embedding-3-large",
       input: inputs,
     });
 
@@ -117,6 +187,7 @@ export async function embedProductsInBatches(
 // --- Publikus: embedding alapú rangsorolás (KERESÉSKOR) ---
 // ✅ Itt már NEM embedeljük újra a termékeket!
 // Csak a user kap 1 embeddinget, a termékeknél a tárolt product.embedding-et használjuk.
+// ✅ Automatikusan detektáljuk a modellt a termékek dimenziója alapján.
 export async function rankProductsWithEmbeddings(
   user: UserContext,
   products: Product[]
@@ -125,8 +196,9 @@ export async function rankProductsWithEmbeddings(
     return [];
   }
 
+  const model = detectEmbedModel(products);
   const userText = buildUserProfileText(user);
-  const userEmbedding = await embedSingle(userText);
+  const userEmbedding = await embedSingle(userText, model);
 
   const scored = products.map((product) => {
     const emb = Array.isArray(product.embedding) ? (product.embedding as Embedding) : null;

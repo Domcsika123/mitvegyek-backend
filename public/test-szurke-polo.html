@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teszt: Szürke Póló</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f3f4f6;
+      padding: 20px;
+      color: #111827;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 24px;
+      color: #111827;
+    }
+    
+    .controls {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      margin-bottom: 24px;
+    }
+    
+    .input-group {
+      margin-bottom: 16px;
+    }
+    
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #374151;
+    }
+    
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 16px;
+      transition: border-color 0.2s;
+    }
+    
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+    
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    button:hover {
+      background: #2563eb;
+    }
+    
+    button:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+    
+    .stats {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      margin-bottom: 24px;
+    }
+    
+    .stats h2 {
+      font-size: 20px;
+      margin-bottom: 12px;
+      color: #111827;
+    }
+    
+    .stat-row {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 8px;
+    }
+    
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .stat-label {
+      font-weight: 600;
+      color: #6b7280;
+    }
+    
+    .stat-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: #111827;
+    }
+    
+    .success {
+      color: #059669;
+    }
+    
+    .warning {
+      color: #dc2626;
+    }
+    
+    .section {
+      margin-bottom: 32px;
+    }
+    
+    .section-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: #111827;
+    }
+    
+    .products-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+    }
+    
+    .product-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      padding: 16px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .product-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.12);
+    }
+    
+    .product-image {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      background: #f3f4f6;
+    }
+    
+    .product-name {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #111827;
+      line-height: 1.4;
+    }
+    
+    .product-description {
+      font-size: 14px;
+      color: #6b7280;
+      margin-bottom: 8px;
+      line-height: 1.5;
+    }
+    
+    .product-price {
+      font-size: 18px;
+      font-weight: 700;
+      color: #059669;
+    }
+    
+    .product-meta {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-top: 8px;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 40px;
+      font-size: 18px;
+      color: #6b7280;
+    }
+    
+    .error {
+      background: #fef2f2;
+      border: 2px solid #fecaca;
+      color: #dc2626;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 Teszt: Szürke Póló Query</h1>
+    
+    <div class="controls">
+      <div class="input-group">
+        <label for="query">Keresési kifejezés:</label>
+        <input type="text" id="query" value="szurke polo" placeholder="Pl: szürke póló">
+      </div>
+      <button id="searchBtn">Keresés</button>
+    </div>
+    
+    <div id="error" class="error" style="display: none;"></div>
+    
+    <div id="stats" style="display: none;" class="stats">
+      <h2>📊 Eredmények statisztikája</h2>
+      <div class="stat-row">
+        <div class="stat-item">
+          <span class="stat-label">FULL matches:</span>
+          <span class="stat-value" id="fullCount">-</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">A csoport (csak típus):</span>
+          <span class="stat-value" id="aCount">-</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Main lista:</span>
+          <span class="stat-value" id="mainCount">-</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Also lista:</span>
+          <span class="stat-value" id="alsoCount">-</span>
+        </div>
+      </div>
+      <div class="stat-row" style="margin-top: 16px;">
+        <div class="stat-item">
+          <span class="stat-label">Ellenőrzés:</span>
+          <span class="stat-value" id="validation">-</span>
+        </div>
+      </div>
+    </div>
+    
+    <div id="loading" class="loading" style="display: none;">
+      ⏳ Betöltés...
+    </div>
+    
+    <div id="mainSection" class="section" style="display: none;">
+      <h2 class="section-title">🎯 Főlista (Main Products)</h2>
+      <div id="mainProducts" class="products-grid"></div>
+    </div>
+    
+    <div id="alsoSection" class="section" style="display: none;">
+      <h2 class="section-title">💡 Esetleg ezek is érdekelhetnek (Also Items)</h2>
+      <div id="alsoProducts" class="products-grid"></div>
+    </div>
+  </div>
+  
+  <script>
+    const API_KEY = '6b6d4c22939ffcaf507ef23570a44959adb67fea3f95ecc5';
+    const API_URL = 'http://localhost:3001/api/recommend';
+    
+    function createProductCard(product) {
+      return `
+        <div class="product-card">
+          <img src="${product.image || '/placeholder.png'}" alt="${product.name}" class="product-image" onerror="this.style.display='none'">
+          <div class="product-name">${product.name}</div>
+          ${product.description ? `<div class="product-description">${product.description}</div>` : ''}
+          <div class="product-price">${product.price ? product.price + ' Ft' : 'Ár nem elérhető'}</div>
+          ${product.colors ? `<div class="product-meta">Szín: ${product.colors.join(', ')}</div>` : ''}
+          ${product.type ? `<div class="product-meta">Típus: ${product.type}</div>` : ''}
+        </div>
+      `;
+    }
+    
+    async function search() {
+      const query = document.getElementById('query').value.trim();
+      if (!query) {
+        alert('Kérlek írj be egy keresési kifejezést!');
+        return;
+      }
+      
+      // UI reset
+      document.getElementById('error').style.display = 'none';
+      document.getElementById('stats').style.display = 'none';
+      document.getElementById('mainSection').style.display = 'none';
+      document.getElementById('alsoSection').style.display = 'none';
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('searchBtn').disabled = true;
+      
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': API_KEY
+          },
+          body: JSON.stringify({
+            query: query,
+            user: {
+              browsing_history: []
+            }
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Statisztikák
+        const fullCount = data.meta?.groupsCount?.FULL || 0;
+        const aCount = data.meta?.groupsCount?.A || 0;
+        const mainCount = data.items?.length || 0;
+        const alsoCount = data.also_items?.length || 0;
+        
+        document.getElementById('fullCount').textContent = fullCount;
+        document.getElementById('aCount').textContent = aCount;
+        document.getElementById('mainCount').textContent = mainCount;
+        document.getElementById('alsoCount').textContent = alsoCount;
+        
+        // Validáció
+        const validation = document.getElementById('validation');
+        if (data.meta?.hasExactMatch && fullCount === mainCount) {
+          validation.textContent = '✓ HELYES: Main lista = FULL matches';
+          validation.className = 'stat-value success';
+        } else if (data.meta?.hasExactMatch && fullCount !== mainCount) {
+          validation.textContent = '✗ HIBA: Main lista ≠ FULL matches';
+          validation.className = 'stat-value warning';
+        } else {
+          validation.textContent = '○ Nincs FULL match';
+          validation.className = 'stat-value';
+        }
+        
+        document.getElementById('stats').style.display = 'block';
+        
+        // Main products
+        if (data.items && data.items.length > 0) {
+          const mainHtml = data.items.map(createProductCard).join('');
+          document.getElementById('mainProducts').innerHTML = mainHtml;
+          document.getElementById('mainSection').style.display = 'block';
+        }
+        
+        // Also items
+        if (data.also_items && data.also_items.length > 0) {
+          const alsoHtml = data.also_items.map(createProductCard).join('');
+          document.getElementById('alsoProducts').innerHTML = alsoHtml;
+          document.getElementById('alsoSection').style.display = 'block';
+        }
+        
+      } catch (error) {
+        console.error('Error:', error);
+        const errorEl = document.getElementById('error');
+        errorEl.textContent = '❌ Hiba történt: ' + error.message + ' (Biztos fut a szerver a localhost:3001-en?)';
+        errorEl.style.display = 'block';
+      } finally {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('searchBtn').disabled = false;
+      }
+    }
+    
+    // Event listeners
+    document.getElementById('searchBtn').addEventListener('click', search);
+    document.getElementById('query').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') search();
+    });
+    
+    // Auto search on load
+    window.addEventListener('load', () => {
+      setTimeout(search, 500);
+    });
+  </script>
+</body>
+</html>

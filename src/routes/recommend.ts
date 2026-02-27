@@ -2,11 +2,23 @@
 import { Router } from "express";
 import { getProductsForSite } from "../services/productService";
 import { rankProductsWithEmbeddings } from "../ai/embeddings";
-import { rerankWithLLM } from "../ai/rerank";
-import { filterProductsByRules } from "../ai/rules";
 import { UserContext } from "../models/UserContext";
 import { recordProductOpenClick, recordRecommendation } from "../services/statsService";
-import { findPartnerByApiKey, findPartnerBySiteKey } from "../services/partnerService";
+import {
+  findPartnerByApiKey,
+  findPartnerBySiteKey,
+} from "../services/partnerService";
+import { getPublicWidgetConfig } from "../services/widgetConfigService";
+import {
+  buildNoExactMessage,
+  buildQueryFromUserInput,
+  rankProducts,
+} from "../reco/ranker";
+import { filterProductsByBudgetOnly, filterProductsMinimal } from "../ai/rules";
+import { keywordSearch, mergeSearchResults } from "../ai/keywordSearch";
+import { hybridSearch, ScoredProduct } from "../search/hybridSearch";
+import { buildCardDescription } from "../reco/buildCardDescription";
+import { parseQuery, signalsSummary } from "../search/signals";
 
 const router = Router();
 
@@ -197,7 +209,32 @@ router.get("/partner-status", (req, res) => {
   if (!p) return res.json({ allowed: false, reason: "INVALID_API_KEY" });
   if (p.blocked) return res.json({ allowed: false, reason: "PARTNER_BLOCKED" });
 
-  return res.json({ allowed: true, site_key: p.site_key });
+  // ✅ widget_copy + widget_fields + relevance + widget_schema visszaadása
+  const partnerFull = findPartnerBySiteKey(p.site_key);
+  const widgetConfig = (partnerFull as any)?.widget_config || null;
+  const widgetCopy = (partnerFull as any)?.widget_copy || null;
+  const widgetFields = (partnerFull as any)?.widget_fields || null;
+  const relevance = (partnerFull as any)?.relevance || null;
+  const widgetSchema = (partnerFull as any)?.widget_schema || null;
+
+  // ✅ ÚJ: full_widget_config (v2 schema-driven) – ha van, a widget ezt használja
+  const fullWidgetConfig = getPublicWidgetConfig(p.site_key);
+
+  return res.json({
+    allowed: true,
+    site_key: p.site_key,
+    settings: {
+      theme_color: widgetConfig?.theme?.accent || null,
+      widget_copy: widgetCopy,
+      widget_fields: widgetFields,
+      widget_config: widgetConfig,
+      // ✅ ÚJ: relevancia és widget séma
+      relevance: relevance,
+      widget_schema: widgetSchema,
+    },
+    // ✅ ÚJ: full widget config (v2)
+    full_widget_config: fullWidgetConfig,
+  });
 });
 
 // ----- partner-config -----
@@ -281,6 +318,30 @@ router.post("/track/product-open", (req, res) => {
 
 // ----- recommend -----
 
+// Store userQuery for reason generation
+let _currentUserQuery = "";
+let _currentMatchReasons: Map<string, string[]> = new Map();
+
+function mapProductResponse(product: any) {
+  // Use buildCardDescription for catalog-based description - ALWAYS use this for reason
+  const cardDescription = buildCardDescription(product);
+  
+  // ✅ FIX: Always use catalog description as reason, never "polo típus" style
+  const smartReason = cardDescription || product.name || "Ajánlott termék";
+  
+  return {
+    product_id: product.product_id,
+    name: product.name,
+    price: product.price,
+    category: product.category,
+    description: cardDescription, // Use concise catalog-based description
+    full_description: product.description, // Keep original for detail view
+    image_url: product.image_url,
+    product_url: product.product_url,
+    reason: smartReason,
+  };
+}
+
 router.post("/recommend", async (req, res) => {
   const origin = req.headers.origin as string | undefined;
   const t0 = Date.now();
@@ -306,22 +367,38 @@ router.post("/recommend", async (req, res) => {
       return res.status(403).json({ error: reason || "PARTNER_BLOCKED" });
     }
 
-    const budgetMin = toNumberOrNull(body.budget_min);
-    const budgetMax = toNumberOrNull(body.budget_max);
-    const age = toNumberOrNull(body.age);
+
+    // Support both flat body AND nested {user: {...}} format
+    const u = body.user && typeof body.user === "object" ? { ...body, ...body.user } : body;
+
+    const budgetMin = toNumberOrNull(u.budget_min);
+    const budgetMax = toNumberOrNull(u.budget_max);
+    const age = toNumberOrNull(u.age);
+
+    // Extract all relevant fields for filtering
+    const queryString = (body.query as string) || (u.query as string) || (u.free_text as string) || "";
+    const directClothingType = (u.clothing_type as string) || "";
+    const color = (u.color as string) || (u.szin as string) || "";
+    const style = (u.style as string) || (u.stilus as string) || "";
+    const material = (u.material as string) || (u.anyag as string) || "";
+    const type = (u.type as string) || (u.tipus as string) || directClothingType || "";
+
+    const rawInterests: string[] = Array.isArray(u.interests)
+      ? u.interests
+      : typeof u.interests === "string" && u.interests.length > 0
+        ? u.interests.split(",").map((x: string) => x.trim())
+        : [];
+
+    let rawFreeText = queryString;
 
     const user: UserContext = {
       age: age ?? undefined,
-      gender: normalizeGender(body.gender),
+      gender: normalizeGender(u.gender),
       budget_min: budgetMin ?? undefined,
       budget_max: budgetMax ?? undefined,
-      relationship: (body.relationship as string) || undefined,
-      interests: Array.isArray(body.interests)
-        ? body.interests
-        : typeof body.interests === "string" && body.interests.length > 0
-          ? body.interests.split(",").map((x: string) => x.trim())
-          : [],
-      free_text: (body.free_text as string) || "",
+      relationship: (u.relationship as string) || undefined,
+      interests: rawInterests,
+      free_text: rawFreeText,
       site_key: siteKey,
     };
 
@@ -330,49 +407,161 @@ router.post("/recommend", async (req, res) => {
       return res.json({ items: [], also_items: [], notice: "Ebben a webshopban még nincs feltöltött termék." });
     }
 
-    // ✅ Embedding alapú előválogatás – de legyen fallback is
-    let rankedByEmbedding: any[] = [];
+    // ✅ HIGH-RECALL: Use new hybridSearch with signal boosting
+    const TOP_CANDIDATES = Math.min(400, allProducts.length);
+    const queryText = [rawFreeText, ...rawInterests].filter(Boolean).join(" ");
+    
+    // Parse query signals for debugging
+    const signals = parseQuery(queryText);
+    console.log(`[recommend] Query signals: ${signalsSummary(signals)}`);
+    
+    // Store query for reason generation
+    _currentUserQuery = queryText;
+    _currentMatchReasons.clear();
+    
+    // Try high-recall hybrid search first
+    let shortlist = allProducts;
+    let hybridResults: ScoredProduct[] = [];
+    
     try {
-      rankedByEmbedding = await rankProductsWithEmbeddings(user, allProducts);
+      hybridResults = await hybridSearch(queryText, allProducts, {
+        topK: TOP_CANDIDATES,
+        minResults: 20,
+        maxResults: 100, // Return ALL matching products, not just 30
+      });
+      
+      if (hybridResults.length > 0) {
+        shortlist = hybridResults.map((r) => r.product);
+        
+        // Store match reasons for each product
+        for (const r of hybridResults) {
+          const pAny = r.product as any;
+          const id = pAny.product_id || pAny.id || r.product.name;
+          _currentMatchReasons.set(id, r.matchReasons);
+        }
+        
+        console.log(`[recommend] HybridSearch: ${hybridResults.length} results, top score: ${hybridResults[0]?.finalScore.toFixed(3)}`);
+        // Log first 5 products in shortlist
+        console.log(`[recommend] HybridSearch shortlist first 5: ${shortlist.slice(0,5).map((p:any) => p.name).join(", ")}`);
+      }
     } catch (e) {
-      console.error("Embedding rangsorolás hiba:", e);
-      rankedByEmbedding = [];
+      console.error("[recommend] HybridSearch error, falling back:", e);
+    }
+    
+    // Fallback to embedding search if hybrid failed
+    let rankedByEmbedding: { product: any; score: number }[] = [];
+    let bestEmbeddingScore = 0;
+    
+    if (hybridResults.length === 0) {
+      try {
+        rankedByEmbedding = await rankProductsWithEmbeddings(user, allProducts);
+        if (Array.isArray(rankedByEmbedding) && rankedByEmbedding.length > 0) {
+          bestEmbeddingScore = rankedByEmbedding[0]?.score || 0;
+          shortlist = rankedByEmbedding.slice(0, TOP_CANDIDATES).map((r) => r.product);
+        }
+      } catch (e) {
+        console.error("Embedding rangsorolás hiba:", e);
+        shortlist = allProducts;
+      }
+
+      // Hybrid fallback: If embedding too weak, add keyword search
+      const MIN_EMBEDDING_SCORE = 0.2;
+      if (bestEmbeddingScore < MIN_EMBEDDING_SCORE || shortlist.length < 20) {
+        try {
+          const keywordResults = keywordSearch(queryText, allProducts, TOP_CANDIDATES);
+          if (keywordResults.length > 0) {
+            const merged = mergeSearchResults(rankedByEmbedding.slice(0, TOP_CANDIDATES), keywordResults, {
+              embeddingWeight: 0.6,
+              keywordWeight: 0.4,
+              topK: TOP_CANDIDATES,
+            });
+            shortlist = merged.map((r) => r.product);
+            console.log(`[recommend] Legacy hybrid: ${merged.length} candidates (best emb: ${bestEmbeddingScore.toFixed(3)})`);
+          }
+        } catch (e) {
+          console.error("Keyword search hiba:", e);
+        }
+      }
     }
 
-    const candidatePoolProducts: any[] =
-      rankedByEmbedding && rankedByEmbedding.length > 0 ? rankedByEmbedding.map((r) => r.product) : allProducts;
+    const query = buildQueryFromUserInput({ ...u, ...user });
+    console.log(`[recommend] Query built: type=${query.tipus}, color=${query.szin}, full query:`, JSON.stringify(query));
+    
+    // ✅ FIX: Apply budget filtering BEFORE ranking so max_ar works
+    const budgetFilteredShortlist = filterProductsByBudgetOnly(user, shortlist);
+    const catalogForRanking = filterProductsByBudgetOnly(user, allProducts);
+    console.log(`[recommend] Budget filter: shortlist ${shortlist.length} -> ${budgetFilteredShortlist.length}, catalog ${allProducts.length} -> ${catalogForRanking.length}`);
+    
+    let ranked = rankProducts(query, budgetFilteredShortlist, {
+      fullCatalog: catalogForRanking,
+      includeDebug: false,
+    });
 
-    const topCandidates = candidatePoolProducts.slice(0, 20);
-
-    let afterRules = filterProductsByRules(user, topCandidates);
-    if (!afterRules || afterRules.length < 8) {
-      afterRules = topCandidates.slice(0, 15);
+    // ✅ FALLBACK: Ha rules után 0, lazítsunk
+    if (ranked.items.length === 0) {
+      // Először csak budget-re szűrés
+      const budgetFiltered = filterProductsByBudgetOnly(user, shortlist);
+      if (budgetFiltered.length > 0) {
+        ranked = rankProducts(query, budgetFiltered, {
+          fullCatalog: allProducts,
+          includeDebug: false,
+        });
+      }
     }
 
-    // ✅ Rerank csak az első 10-12 terméken (gyorsabb válaszidő)
-    const rr = await rerankWithLLM(user, afterRules.slice(0, 12));
+    // Ha még mindig 0: minimális szűrés
+    if (ranked.items.length === 0) {
+      const minimalFiltered = filterProductsMinimal(shortlist);
+      if (minimalFiltered.length > 0) {
+        ranked = rankProducts(query, minimalFiltered, {
+          fullCatalog: allProducts,
+          includeDebug: false,
+        });
+      }
+    }
 
-    const items = (rr.items || []).map((r) => ({
-      product_id: (r.product as any).product_id,
-      name: (r.product as any).name,
-      price: (r.product as any).price,
-      category: (r.product as any).category,
-      description: (r.product as any).description,
-      image_url: (r.product as any).image_url,
-      product_url: (r.product as any).product_url,
-      reason: r.reason,
-    }));
+    // ✅ LOGGING: detailed debug info
+    const searchMode = hybridResults.length > 0 ? 'hybrid' : (bestEmbeddingScore > 0 ? 'embedding' : 'fallback');
+    console.log(`[recommend] site=${siteKey} mode=${searchMode} all=${allProducts.length} shortlist=${shortlist.length} final=${ranked.items.length}`);
 
-    const alsoItems = (rr.also_items || []).map((r) => ({
-      product_id: (r.product as any).product_id,
-      name: (r.product as any).name,
-      price: (r.product as any).price,
-      category: (r.product as any).category,
-      description: (r.product as any).description,
-      image_url: (r.product as any).image_url,
-      product_url: (r.product as any).product_url,
-      reason: r.reason,
-    }));
+    // ✅ SMART SPLITTING: When hasExactMatch=true, main list contains ONLY exact matches
+    // Partial matches (A/B/C groups) go to "also_items" automatically
+    const MAX_ITEMS = 12;
+    const MAX_ALSO_ITEMS = 100; // Increased to show more also_items
+    
+    let mainProducts, alsoProducts;
+    
+    if (ranked.meta.hasExactMatch) {
+      const fullCount = ranked.meta.groupsCount.FULL || 0;
+      
+      // SMART LOGIC: 
+      // - If fullCount <= MAX_ITEMS: show ALL FULL in main, A/B/C in also_items
+      // - If fullCount > MAX_ITEMS: show first MAX_ITEMS FULL in main, rest in also_items
+      // This ensures "cipő" query with 50 shoes shows 12 main + 38 also_items
+      if (fullCount <= MAX_ITEMS) {
+        // Few FULL matches: show all in main
+        mainProducts = ranked.items.slice(0, fullCount);
+        alsoProducts = ranked.items.slice(fullCount, fullCount + MAX_ALSO_ITEMS);
+        console.log(`[recommend] Exact match split: ${fullCount} FULL → main, rest → also_items`);
+      } else {
+        // Many FULL matches: cap main at MAX_ITEMS, rest go to also_items
+        mainProducts = ranked.items.slice(0, MAX_ITEMS);
+        alsoProducts = ranked.items.slice(MAX_ITEMS, MAX_ITEMS + MAX_ALSO_ITEMS);
+        console.log(`[recommend] Many FULL matches (${fullCount}): ${MAX_ITEMS} → main, ${Math.min(fullCount - MAX_ITEMS + (ranked.meta.groupsCount.A || 0), MAX_ALSO_ITEMS)} → also_items`);
+      }
+    } else {
+      // No exact matches: use standard split
+      mainProducts = ranked.items.slice(0, MAX_ITEMS);
+      alsoProducts = ranked.items.slice(MAX_ITEMS, MAX_ITEMS + MAX_ALSO_ITEMS);
+    }
+
+    const items = mainProducts.map(mapProductResponse);
+    const alsoItems = alsoProducts.map(mapProductResponse);
+
+    // CRITICAL: Only show message when hasExactMatch=false
+    const message = ranked.meta.hasExactMatch
+      ? null
+      : buildNoExactMessage(query, { locale: "hu" });
 
     // ✅ stat: sikeres ajánlásnál mérünk időt
     try {
@@ -387,10 +576,27 @@ router.post("/recommend", async (req, res) => {
     return res.json({
       items,
       also_items: alsoItems,
-      notice: rr.notice || null,
+      message,
+      // Backward compatibility: legacy notice key (but now correctly null when exact match)
+      notice: message,
+      meta: ranked.meta,
     });
   } catch (err: any) {
     console.error("Hiba a recommend endpointban:", err);
+    // ✅ JAVÍTOTT: Ne 500, hanem próbáljunk fallback választ adni
+    try {
+      const allProducts = getProductsForSite("default");
+      if (allProducts && allProducts.length > 0) {
+        const fallbackItems = allProducts.slice(0, 6).map(mapProductResponse);
+        return res.json({
+          items: fallbackItems,
+          also_items: [],
+          message: "Hiba történt, de íme néhány ajánlat.",
+          notice: "Hiba történt, de íme néhány ajánlat.",
+          meta: { hasExactMatch: false, fallback: true },
+        });
+      }
+    } catch {}
     return res.status(500).json({ error: "Hiba történt az ajánlás során." });
   }
 });

@@ -2,370 +2,284 @@
 <html lang="hu">
 <head>
   <meta charset="UTF-8" />
-  <title>Mitvegyek.ai – Widget szerkesztő</title>
+  <title>Mitvegyek.ai – Widget szerkesztő V2</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
+    * { box-sizing: border-box; }
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      margin: 0;
-      padding: 24px;
-      background: #f3f4f6;
+      margin: 0; padding: 24px; background: #f3f4f6; color: #111827;
     }
-    h1 { margin-bottom: 8px; }
-    h2 { margin: 0 0 10px 0; }
-    .mv-container { max-width: 1100px; margin: 0 auto; }
-    .mv-card {
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-      padding: 18px 20px;
-      margin-bottom: 18px;
-    }
-    .mv-small { font-size: 13px; color: #4b5563; line-height: 1.4; }
+    h1 { margin-bottom: 4px; font-size: 22px; }
+    h2 { margin: 0 0 8px 0; font-size: 16px; }
+    h3 { margin: 0 0 6px 0; font-size: 14px; font-weight: 700; }
+    .mv-container { max-width: 1200px; margin: 0 auto; }
+    .mv-card { background: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 18px 20px; margin-bottom: 14px; }
+    .mv-small { font-size: 12px; color: #6b7280; line-height: 1.4; }
+    .mv-topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 10px; }
 
-    .mv-topbar{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      margin-bottom: 10px;
-    }
+    .mv-btn { display:inline-flex; align-items:center; justify-content:center; border-radius:999px; border:none; cursor:pointer; padding:7px 14px; font-size:13px; white-space:nowrap; font-weight:400; transition: all .15s; }
+    .mv-btn-primary { background:#2563eb; color:white; }
+    .mv-btn-primary:hover { background:#1d4ed8; }
+    .mv-btn-secondary { background:#e5e7eb; color:#111827; }
+    .mv-btn-secondary:hover { background:#d1d5db; }
+    .mv-btn-danger { background:#dc2626; color:white; }
+    .mv-btn-danger:hover { background:#b91c1c; }
+    .mv-btn-preset { background:#7c3aed; color:white; }
+    .mv-btn-preset:hover { background:#6d28d9; }
+    .mv-btn-sm { padding: 4px 10px; font-size: 12px; }
 
-    .mv-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 999px;
-      border: none;
-      cursor: pointer;
-      padding: 7px 14px;
-      font-size: 13px;
-      white-space: nowrap;
-      font-weight: 400;
-    }
-    .mv-btn-primary { background: #2563eb; color: white; }
-    .mv-btn-primary:hover { background: #1d4ed8; }
-    .mv-btn-secondary { background: #e5e7eb; color: #111827; }
-    .mv-btn-secondary:hover { background: #d1d5db; }
-    .mv-btn-danger { background: #dc2626; color: white; }
-    .mv-btn-danger:hover { background: #b91c1c; }
-
-    .mv-input-row { display:flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
-    .mv-input-group { display:flex; flex-direction:column; min-width: 160px; flex: 1; }
-    .mv-input-group label { font-size: 12px; color: #4b5563; margin-bottom: 4px; font-weight: 700; }
+    .mv-input-row { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:8px; }
+    .mv-input-group { display:flex; flex-direction:column; min-width:140px; flex:1; }
+    .mv-input-group label { font-size:11px; color:#6b7280; margin-bottom:3px; font-weight:700; text-transform:uppercase; letter-spacing:.3px; }
     .mv-input-group input, .mv-input-group textarea, .mv-input-group select {
-      border-radius: 10px;
-      border: 1px solid #d1d5db;
-      padding: 8px 10px;
-      font-size: 13px;
-      font-family: inherit;
-      background: white;
+      border-radius:8px; border:1px solid #d1d5db; padding:7px 10px; font-size:13px; font-family:inherit; background:white;
     }
-    .mv-input-group textarea { min-height: 120px; resize: vertical; }
-    .mv-input-group input:focus, .mv-input-group textarea:focus, .mv-input-group select:focus {
-      outline: none;
-      border-color: #2563eb;
-      box-shadow: 0 0 0 1px #2563eb33;
-    }
+    .mv-input-group textarea { min-height:80px; resize:vertical; }
+    .mv-input-group input:focus, .mv-input-group textarea:focus, .mv-input-group select:focus { outline:none; border-color:#2563eb; box-shadow:0 0 0 1px #2563eb33; }
 
-    .mv-status { font-size: 13px; font-weight: 400; }
-    .mv-status-ok { color: #166534; }
-    .mv-status-error { color: #b91c1c; }
+    .mv-status { font-size:13px; font-weight:600; }
+    .mv-status-ok { color:#166534; }
+    .mv-status-error { color:#b91c1c; }
+    .mv-save-feedback { min-height:18px; display:flex; align-items:center; }
+    .mv-inline-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:12px; }
+    .mv-actions-spacer { flex:1; }
 
-    .grid2{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
-    @media (max-width: 980px){
-      .grid2{ grid-template-columns: 1fr; }
-    }
+    .mv-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+    .mv-tab { border:1px solid #e5e7eb; background:#fff; color:#111827; border-radius:999px; padding:8px 14px; font-size:13px; font-weight:400; cursor:pointer; user-select:none; transition:all .15s; }
+    .mv-tab:hover { background:#f9fafb; }
+    .mv-tab.active { background:#2563eb; border-color:#2563eb; color:#fff; font-weight:400; }
+    .mv-tab-content { display:none; }
+    .mv-tab-content.active { display:block; }
 
-    /* ✅ előnézet 2 oszlop (bal felhő, jobb panel) */
-    .previewGrid{
-      display:grid;
-      grid-template-columns: 360px 1fr;
-      gap: 12px;
-      margin-top: 12px;
-      align-items: start;
-    }
-    @media (max-width: 980px){
-      .previewGrid{ grid-template-columns: 1fr; }
-    }
-    .previewBoxTitle{
-      font-size: 12px;
-      color: #6b7280;
-      margin: 0 0 6px 2px;
-      font-weight: 700;
-    }
+    /* FIELD LIST */
+    .field-list { display:flex; flex-direction:column; gap:6px; }
+    .field-item { border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; background:#fafafa; display:flex; align-items:center; gap:8px; transition:all .15s; }
+    .field-item:hover { border-color:#93c5fd; background:#eff6ff; }
+    .field-item.dragging { opacity:.5; }
+    .field-handle { cursor:grab; color:#9ca3af; font-size:16px; user-select:none; }
+    .field-handle:active { cursor:grabbing; }
+    .field-info { flex:1; min-width:0; }
+    .field-info-label { font-size:13px; font-weight:700; color:#111827; }
+    .field-info-meta { font-size:11px; color:#6b7280; }
+    .field-actions { display:flex; gap:4px; }
+    .field-toggle { width:36px; height:20px; border-radius:10px; background:#cbd5e1; position:relative; cursor:pointer; transition:background .2s; border:none; }
+    .field-toggle.on { background:#2563eb; }
+    .field-toggle::after { content:''; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:white; transition:transform .2s; }
+    .field-toggle.on::after { transform:translateX(16px); }
 
-    .mv-inline-actions{
-      display:flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items:center;
-      margin-top: 12px;
-    }
-    .mv-actions-spacer{ flex: 1; }
-    .mv-save-feedback{
-      min-height: 18px;
-      display:flex;
-      align-items:center;
-      justify-content:flex-end;
-      text-align:right;
-    }
+    /* FIELD EDITOR MODAL */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:10000; display:flex; align-items:center; justify-content:center; }
+    .modal-box { background:white; border-radius:16px; padding:24px; width:560px; max-width:calc(100vw - 40px); max-height:calc(100vh - 80px); overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+    .modal-box h2 { margin:0 0 14px 0; font-size:18px; }
+    .modal-box .mv-input-row { margin-bottom:10px; }
 
-    /* ✅ Színek blokk: szebb layout */
-    .color-grid{
-      display:flex;
-      flex-direction:column;
-      gap: 10px;
-      margin-top: 8px;
-    }
-    .color-row{
-      display:flex;
-      gap: 12px;
-      align-items:center;
-      padding: 10px 10px;
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      background: #f9fafb;
-    }
-    .color-meta{
-      flex: 1;
-      min-width: 160px;
-      display:flex;
-      flex-direction:column;
-      gap: 2px;
-    }
-    .color-title{
-      font-size: 13px;
-      font-weight: 800;
-      color: #111827;
-    }
-    .color-desc{
-      font-size: 12px;
-      color: #6b7280;
-    }
-    .color-controls{
-      display:flex;
-      align-items:center;
-      gap: 8px;
-    }
-    .color-controls input[type="color"]{
-      width: 44px;
-      height: 36px;
-      border-radius: 10px;
-      border: 1px solid #d1d5db;
-      padding: 0;
-      background: white;
-      cursor: pointer;
-    }
-    .color-hex{
-      width: 120px;
-      border-radius: 10px;
-      border: 1px solid #d1d5db;
-      padding: 8px 10px;
-      font-size: 13px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      background: white;
-    }
-    .color-hex:focus{
-      outline:none;
-      border-color:#2563eb;
-      box-shadow: 0 0 0 1px #2563eb33;
-    }
+    /* OPTIONS EDITOR */
+    .opt-list { display:flex; flex-direction:column; gap:4px; margin-bottom:6px; }
+    .opt-item { display:flex; gap:6px; align-items:center; }
+    .opt-item input { flex:1; }
+    .opt-remove { background:none; border:none; color:#dc2626; cursor:pointer; font-size:16px; font-weight:700; }
 
-    /* ===== Preview keret + scale (megjelenítéshez) ===== */
-    .previewWrap{
-      position: relative;
-      height: var(--pv-h, 520px); /* ✅ per-preview magasság */
-      border-radius: 14px;
-      overflow: hidden;
-      background: #f8fafc;
-      border: 1px solid #e5e7eb;
-    }
-    .previewStage{
-      position: absolute;
-      transform-origin: top left;
-      left: 0;
-      top: 0;
-    }
-    .previewStage iframe{
-      border: 0;
-      display: block;
-      background: #f8fafc;
-    }
+    /* MAPPING SECTION */
+    .mapping-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 
-    /* ✅ Bal oldali felhő preview: ne legyen kattintható (iframe szinten) */
-    #preview-bubble{
-      pointer-events: none !important;
-    }
-    /* ✅ Jobb oldali panel preview: kattintható marad (scroll/input), a bezárást a widget.js tiltja */
-    #preview-panel{
-      pointer-events: auto !important;
-    }
-    /* ✅ finomítás: több hely a panelnek */
-    .previewGrid{
-    grid-template-columns: 300px 1fr; /* 360 helyett */
-    }
+    /* COLOR GRID */
+    .color-grid { display:flex; flex-direction:column; gap:6px; }
+    .color-row { display:flex; gap:10px; align-items:center; padding:8px 10px; border:1px solid #e5e7eb; border-radius:10px; background:#f9fafb; }
+    .color-meta { flex:1; min-width:120px; }
+    .color-title { font-size:12px; font-weight:800; color:#111827; }
+    .color-desc { font-size:11px; color:#6b7280; }
+    .color-controls { display:flex; align-items:center; gap:6px; }
+    .color-controls input[type="color"] { width:36px; height:30px; border-radius:8px; border:1px solid #d1d5db; padding:0; background:white; cursor:pointer; }
+    .color-hex { width:90px; border-radius:8px; border:1px solid #d1d5db; padding:6px 8px; font-size:12px; font-family:ui-monospace,monospace; background:white; }
 
-    /* ✅ külön magasság a két preview doboznak */
-    .previewWrap--bubble{ height: 320px; }
-    .previewWrap--panel{ height: 640px; }  /* itt lesz nagyobb a panel */
+    /* PREVIEW */
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media (max-width:980px) { .grid2 { grid-template-columns:1fr; } }
+    .previewGrid { display:grid; grid-template-columns:300px 1fr; gap:12px; margin-top:10px; align-items:start; }
+    @media (max-width:980px) { .previewGrid { grid-template-columns:1fr; } }
+    .previewBoxTitle { font-size:11px; color:#6b7280; margin:0 0 4px 2px; font-weight:700; }
+    .previewWrap { position:relative; border-radius:12px; overflow:hidden; background:#f8fafc; border:1px solid #e5e7eb; }
+    .previewWrap--bubble { height:280px; }
+    .previewWrap--panel { height:600px; }
+    .previewStage { position:absolute; transform-origin:top left; left:0; top:0; }
+    .previewStage iframe { border:0; display:block; background:#f8fafc; }
+    #preview-bubble { pointer-events:none !important; }
+    #preview-panel { pointer-events:auto !important; }
 
+    /* PRESETS BAR */
+    .preset-bar { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
 
+    hr.sep { border:none; border-top:1px solid #e5e7eb; margin:14px 0 10px 0; }
+
+    /* VISIBILITY EDITOR */
+    .vis-rules { display:flex; flex-direction:column; gap:4px; margin-top:4px; }
+    .vis-rule { display:flex; gap:6px; align-items:center; }
+    .vis-rule select, .vis-rule input { font-size:12px; padding:4px 6px; border-radius:6px; border:1px solid #d1d5db; }
   </style>
 
   <script>
-    // ✅ AUTH: admin token ellenőrzés
+    // AUTH
     (function () {
       const token = localStorage.getItem("mv_admin_token");
-      if (!token) {
-        window.location.href = "/admin-login.html";
-        return;
-      }
+      if (!token) { window.location.href = "/admin-login.html"; return; }
       window.MV_ADMIN_TOKEN = token;
     })();
 
     async function adminFetch(url, options) {
       const token = window.MV_ADMIN_TOKEN;
       const opts = options || {};
-      const headers = Object.assign({}, opts.headers || {}, {
-        "x-admin-token": token
-      });
-      opts.headers = headers;
-
+      opts.headers = Object.assign({}, opts.headers || {}, { "x-admin-token": token });
       const res = await fetch(url, opts);
-
-      if (res.status === 401) {
-        localStorage.removeItem("mv_admin_token");
-        window.location.href = "/admin-login.html";
-        return res;
-      }
+      if (res.status === 401) { localStorage.removeItem("mv_admin_token"); window.location.href = "/admin-login.html"; }
       return res;
     }
 
-    function qsGet(name){
-      try {
-        const u = new URL(window.location.href);
-        return u.searchParams.get(name);
-      } catch(_){ return null; }
-    }
-
-    function setStatus(el, text, ok){
+    function qsGet(name) { try { return new URL(window.location.href).searchParams.get(name); } catch(_) { return null; } }
+    function setStatus(el, text, ok) {
       if(!el) return;
       el.textContent = text || "";
       el.className = "mv-status mv-save-feedback";
-      if(!text) return;
       if(ok === true) el.classList.add("mv-status-ok");
       if(ok === false) el.classList.add("mv-status-error");
     }
+    function isHexColor(s) { return typeof s === "string" && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(s.trim()); }
+    function escapeHtml(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
-    function isHexColor(s){
-      return typeof s === "string" && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(s.trim());
-    }
-
-    function defaultConfig(siteKey){
-      return {
-        bubble_texts: [
-          "Dönts könnyebben.",
-          "Ne vacillálj! Segítek!",
-          "Ez a tuti. Nyomd meg!",
-          "Egy kattintás és kész!",
-          "Könnyebb így.",
-          "Ne vacillálj, megoldjuk.",
-          "Kattints, és kész.",
-          "Kíváncsi vagy? Katt!",
-          "Ez a segítség amire vártál!",
-          "Itt kezdődik a jó döntés.",
-        ],
-        panel_title: "Termékajánló",
-        panel_subtitle: "Pár adat alapján mutatok jó találatokat",
-        interest_placeholder: `pl. futás, tech, kávé, fotózás (${siteKey})`,
-        details_placeholder: "pl. szereti a praktikus dolgokat, kütyüket, sportot...",
-        theme: {
-          bubble_bg: "#3b82f6",
-          bubble_text: "#ffffff",
-          panel_bg: "#ffffff",
-          panel_text: "#0F172A",
-          button_bg: "#6366F1",
-          button_text: "#ffffff",
-          accent: "#6366F1",
-          header_grad_start: "#6366F1",
-          header_grad_end: "#3B82F6"
-        }
-      };
-    }
-
+    // ========== STATE ==========
     let partnersBySiteKey = new Map();
     let catalogs = [];
     let currentSiteKey = "";
     let currentApiKey = "";
-    let currentConfig = null;
+    let currentFullConfig = null; // FullWidgetConfig v2
 
-    // ✅ 2 preview iframe
+    // Preview iframes
     let previewBubbleReady = false;
     let previewPanelReady = false;
     let postTimer = null;
 
-    function postPreview(){
-      if(postTimer) clearTimeout(postTimer);
-      postTimer = setTimeout(() => {
-        const msg = { type: "MV_WIDGET_PREVIEW_CONFIG", config: currentConfig };
+    // ========== FIELD TYPES ==========
+    const FIELD_TYPES = [
+      { value: "text", label: "Szöveg (text)" },
+      { value: "textarea", label: "Szöveg (textarea)" },
+      { value: "number", label: "Szám (number)" },
+      { value: "select", label: "Legördülő (select)" },
+      { value: "multiselect", label: "Több kiválasztás (multiselect)" },
+      { value: "radio", label: "Rádiógomb (radio)" },
+      { value: "checkbox", label: "Jelölőnégyzet (checkbox)" },
+      { value: "chips", label: "Chipek (chips)" },
+      { value: "toggle", label: "Kapcsoló (toggle)" },
+      { value: "range", label: "Csúszka (range)" },
+      { value: "date", label: "Dátum (date)" },
+    ];
 
-        const fBubble = document.getElementById("preview-bubble");
-        if(previewBubbleReady && fBubble && fBubble.contentWindow){
-          try { fBubble.contentWindow.postMessage(msg, window.location.origin); } catch(_) {}
-        }
+    const MAPPING_TARGETS = [
+      { value: "user.relationship", label: "Kinek keresel (relationship)" },
+      { value: "user.age", label: "Kor (age)" },
+      { value: "user.gender", label: "Nem (gender)" },
+      { value: "user.budget_min", label: "Min. költségkeret (budget_min)" },
+      { value: "user.budget_max", label: "Max. költségkeret (budget_max)" },
+      { value: "user.interests", label: "Érdeklődés (interests)" },
+      { value: "user.free_text", label: "Szabad szöveg (free_text)" },
+      { value: "user.category", label: "Kategória (category → interests)" },
+    ];
 
-        const fPanel = document.getElementById("preview-panel");
-        if(previewPanelReady && fPanel && fPanel.contentWindow){
-          try { fPanel.contentWindow.postMessage(msg, window.location.origin); } catch(_) {}
-        }
-      }, 60);
+    const MAPPING_FORMATS = [
+      { value: "raw", label: "Nyers érték" },
+      { value: "value", label: "Value" },
+      { value: "label", label: "Label (megjelenített szöveg)" },
+      { value: "kv", label: "Kulcs: érték" },
+      { value: "sentence", label: "Mondat" },
+    ];
+
+    // ========== DEFAULT CONFIG ==========
+    function getDefaultConfig() {
+      return {
+        version: 1,
+        ui: {
+          theme: {
+            primaryColor: "#6366F1", accentColor: "#6366F1", backgroundColor: "#ffffff", textColor: "#0F172A",
+            buttonRadius: 14, fontFamily: "system-ui, -apple-system, sans-serif", panelPosition: "right",
+            widthPx: 420, zIndex: 99999, bubblePosition: "bottom-right", bubbleOffsetX: 8, bubbleOffsetY: 8, currency: "HUF", bubbleBg: "#3b82f6", bubbleText: "#ffffff",
+            headerGradStart: "#6366F1", headerGradEnd: "#3B82F6", buttonBg: "#6366F1", buttonText: "#ffffff",
+          },
+          copy: {
+            panelTitle: "Termékajánló", panelSubtitle: "Pár adat alapján mutatok jó találatokat",
+            helpText: "Tipp: elég 1–2 mező (pl. érdeklődés + max összeg).",
+            submitText: "✨ Ajánlatot kérek", resetText: "🔄 Új ajánlat",
+            loadingText: "Ajánlatok betöltése…",
+            emptyStateText: "Nem találtam megfelelő terméket a megadott feltételekkel.",
+            errorText: "Hiba az ajánlás közben. Kérlek próbáld újra!",
+            consentText: "", footerText: "",
+          },
+        },
+        form: {
+          fields: [
+            { id: "relationship", type: "text", label: "👤 Kinek keresel?", placeholder: "pl. barátomnak, anyukámnak", enabled: true, required: false, order: 10, mapping: { target: "user.relationship", format: "raw" } },
+            { id: "age", type: "number", label: "🎂 Kor", placeholder: "pl. 25", enabled: true, required: false, min: 0, max: 120, order: 20, mapping: { target: "user.age", format: "raw" } },
+            { id: "gender", type: "select", label: "⚧ Nem", enabled: true, required: false, defaultValue: "unknown", options: [{ value: "unknown", label: "Mindegy" }, { value: "male", label: "Férfi" }, { value: "female", label: "Nő" }], order: 21, mapping: { target: "user.gender", format: "value" } },
+            { id: "budget_min", type: "number", label: "💰 Min. összeg (Ft)", placeholder: "pl. 3000", enabled: true, required: false, min: 0, order: 30, mapping: { target: "user.budget_min", format: "raw" } },
+            { id: "budget_max", type: "number", label: "💰 Max. összeg (Ft)", placeholder: "pl. 15000", enabled: true, required: false, min: 0, order: 31, mapping: { target: "user.budget_max", format: "raw" } },
+            { id: "interests", type: "text", label: "❤️ Érdeklődés", placeholder: "pl. futás, tech, kávé, fotózás", enabled: true, required: false, order: 40, mapping: { target: "user.interests", format: "raw" } },
+            { id: "free_text", type: "textarea", label: "📝 További részletek", placeholder: "pl. szereti a praktikus dolgokat, kütyüket, sportot...", enabled: true, required: false, order: 50, mapping: { target: "user.free_text", format: "raw" } },
+          ],
+          submit: { allowEmpty: false, validationMode: "onSubmit" },
+        },
+        bubble: {
+          texts: ["Dönts könnyebben.", "Ne vacillálj! Segítek!", "Ez a tuti. Nyomd meg!", "Egy kattintás és kész!", "Könnyebb így.", "Ne vacillálj, megoldjuk.", "Kattints, és kész.", "Kíváncsi vagy? Katt!", "Ez a segítség amire vártál!", "Itt kezdődik a jó döntés."],
+        },
+      };
     }
 
-    function rebuildIframes(){
-      const origin = window.location.origin;
+    // ========== PREVIEW ==========
+    function postPreview() {
+      if (postTimer) clearTimeout(postTimer);
+      postTimer = setTimeout(() => {
+        const msg = { type: "MV_WIDGET_FULL_CONFIG", config: currentFullConfig };
+        const fBubble = document.getElementById("preview-bubble");
+        if (previewBubbleReady && fBubble && fBubble.contentWindow) {
+          try { fBubble.contentWindow.postMessage(msg, window.location.origin); } catch(_) {}
+        }
+        const fPanel = document.getElementById("preview-panel");
+        if (previewPanelReady && fPanel && fPanel.contentWindow) {
+          try { fPanel.contentWindow.postMessage(msg, window.location.origin); } catch(_) {}
+        }
+      }, 80);
+    }
 
+    function rebuildIframes() {
+      const origin = window.location.origin;
       const bubbleFrame = document.getElementById("preview-bubble");
       const panelFrame = document.getElementById("preview-panel");
-      if(!bubbleFrame || !panelFrame) return;
+      if (!bubbleFrame || !panelFrame) return;
 
-      // bal: csak felhő
       const qs1 = new URLSearchParams();
       qs1.set("site_key", currentSiteKey);
-      if(currentApiKey) qs1.set("api_key", currentApiKey);
+      if (currentApiKey) qs1.set("api_key", currentApiKey);
       qs1.set("mv_preview", "bubble");
 
-      // jobb: panel nyitva
       const qs2 = new URLSearchParams();
       qs2.set("site_key", currentSiteKey);
-      if(currentApiKey) qs2.set("api_key", currentApiKey);
+      if (currentApiKey) qs2.set("api_key", currentApiKey);
       qs2.set("mv_preview", "panel");
 
       previewBubbleReady = false;
       previewPanelReady = false;
-
       bubbleFrame.src = `${origin}/demo.html?${qs1.toString()}`;
       panelFrame.src = `${origin}/demo.html?${qs2.toString()}`;
     }
 
-    async function loadPartnersAndCatalogs(){
+    // ========== LOAD / SAVE ==========
+    async function loadPartnersAndCatalogs() {
       const pres = await adminFetch("/api/admin/partners");
       const pdata = pres && pres.ok ? await pres.json() : { partners: [] };
-      const ps = pdata.partners || [];
-      partnersBySiteKey = new Map();
-      ps.forEach(p => partnersBySiteKey.set(p.site_key, p));
+      (pdata.partners || []).forEach(p => partnersBySiteKey.set(p.site_key, p));
 
       const cres = await adminFetch("/api/admin/catalogs");
       const cdata = cres && cres.ok ? await cres.json() : { catalogs: [] };
-      const raw = cdata.catalogs || [];
-      catalogs = raw.map((c) => ({
+      catalogs = (cdata.catalogs || []).map(c => ({
         siteKey: c.siteKey || c.site_key || c.key || "ismeretlen",
-        productCount: typeof c.productCount === "number" ? c.productCount :
-                      typeof c.count === "number" ? c.count : 0
+        productCount: typeof c.productCount === "number" ? c.productCount : typeof c.count === "number" ? c.count : 0,
       }));
 
       const sel = document.getElementById("siteKeySelect");
@@ -380,206 +294,642 @@
       const fromUrl = qsGet("site_key");
       const first = catalogs.length ? catalogs[0].siteKey : "";
       currentSiteKey = (fromUrl && catalogs.some(x => x.siteKey === fromUrl)) ? fromUrl : first;
-
       sel.value = currentSiteKey;
       await loadConfigFor(currentSiteKey);
     }
 
-    async function loadConfigFor(siteKey){
+    async function loadConfigFor(siteKey) {
       currentSiteKey = siteKey;
-
       const p = partnersBySiteKey.get(siteKey);
       currentApiKey = p && p.api_key ? String(p.api_key) : "";
 
       setStatus(document.getElementById("saveStatus"), "Betöltés...", true);
 
-      let widget_config = null;
       try {
-        const res = await adminFetch(`/api/admin/widget-config/${encodeURIComponent(siteKey)}`);
-        if(res && res.ok){
+        const res = await adminFetch(`/api/admin/full-widget-config/${encodeURIComponent(siteKey)}`);
+        if (res && res.ok) {
           const data = await res.json();
-          widget_config = data.widget_config || null;
+          currentFullConfig = data.config || getDefaultConfig();
+        } else {
+          currentFullConfig = getDefaultConfig();
         }
-      } catch(_) {}
+      } catch(_) {
+        currentFullConfig = getDefaultConfig();
+      }
 
-      currentConfig = widget_config || defaultConfig(siteKey);
-
-      fillFormFromConfig(currentConfig);
+      renderFieldList();
+      fillThemeForm();
+      fillCopyForm();
+      fillBubbleForm();
       rebuildIframes();
 
       setStatus(document.getElementById("saveStatus"), "Kész.", true);
       setTimeout(() => setStatus(document.getElementById("saveStatus"), "", null), 800);
     }
 
-    function fillFormFromConfig(cfg){
-      const t = cfg.theme || {};
-
-      document.getElementById("panelTitle").value = cfg.panel_title || "";
-      document.getElementById("panelSubtitle").value = cfg.panel_subtitle || "";
-      document.getElementById("interestPh").value = cfg.interest_placeholder || "";
-      document.getElementById("detailsPh").value = cfg.details_placeholder || "";
-
-      document.getElementById("bubbleTexts").value =
-        Array.isArray(cfg.bubble_texts) ? cfg.bubble_texts.join("\n") : "";
-
-      function setPair(colorId, hexId, val, fallback){
-        const v = isHexColor(val) ? val : fallback;
-        document.getElementById(colorId).value = v;
-        document.getElementById(hexId).value = v;
-      }
-
-      setPair("bubbleBg", "bubbleBgHex", t.bubble_bg, "#3b82f6");
-      setPair("bubbleText", "bubbleTextHex", t.bubble_text, "#ffffff");
-      setPair("panelBg", "panelBgHex", t.panel_bg, "#ffffff");
-      setPair("panelText", "panelTextHex", t.panel_text, "#0F172A");
-      setPair("buttonBg", "buttonBgHex", t.button_bg, "#6366F1");
-      setPair("buttonText", "buttonTextHex", t.button_text, "#ffffff");
-      setPair("accent", "accentHex", t.accent, "#6366F1");
-      setPair("headerStart", "headerStartHex", t.header_grad_start, "#6366F1");
-      setPair("headerEnd", "headerEndHex", t.header_grad_end, "#3B82F6");
-    }
-
-    function readConfigFromForm(){
-      const cfg = {
-        bubble_texts: (document.getElementById("bubbleTexts").value || "")
-          .split("\n").map(s => s.trim()).filter(Boolean),
-        panel_title: document.getElementById("panelTitle").value || "",
-        panel_subtitle: document.getElementById("panelSubtitle").value || "",
-        interest_placeholder: document.getElementById("interestPh").value || "",
-        details_placeholder: document.getElementById("detailsPh").value || "",
-        theme: {
-          bubble_bg: document.getElementById("bubbleBgHex").value,
-          bubble_text: document.getElementById("bubbleTextHex").value,
-          panel_bg: document.getElementById("panelBgHex").value,
-          panel_text: document.getElementById("panelTextHex").value,
-          button_bg: document.getElementById("buttonBgHex").value,
-          button_text: document.getElementById("buttonTextHex").value,
-          accent: document.getElementById("accentHex").value,
-          header_grad_start: document.getElementById("headerStartHex").value,
-          header_grad_end: document.getElementById("headerEndHex").value,
-        }
-      };
-      return cfg;
-    }
-
-    function hookColorPair(colorId, hexId){
-      const c = document.getElementById(colorId);
-      const h = document.getElementById(hexId);
-
-      c.addEventListener("input", () => {
-        h.value = c.value;
-        currentConfig = readConfigFromForm();
-        postPreview();
-      });
-
-      h.addEventListener("input", () => {
-        if(isHexColor(h.value)){
-          c.value = h.value.trim();
-          currentConfig = readConfigFromForm();
-          postPreview();
-        }
-      });
-    }
-
-    function hookLive(){
-      const ids = ["panelTitle","panelSubtitle","interestPh","detailsPh","bubbleTexts"];
-      ids.forEach(id => {
-        const el = document.getElementById(id);
-        if(!el) return;
-        el.addEventListener("input", () => {
-          currentConfig = readConfigFromForm();
-          postPreview();
-        });
-      });
-
-      hookColorPair("bubbleBg","bubbleBgHex");
-      hookColorPair("bubbleText","bubbleTextHex");
-      hookColorPair("panelBg","panelBgHex");
-      hookColorPair("panelText","panelTextHex");
-      hookColorPair("buttonBg","buttonBgHex");
-      hookColorPair("buttonText","buttonTextHex");
-      hookColorPair("accent","accentHex");
-      hookColorPair("headerStart","headerStartHex");
-      hookColorPair("headerEnd","headerEndHex");
-    }
-
-    async function saveConfig(){
+    async function saveConfig() {
       const statusEl = document.getElementById("saveStatus");
-      try{
+      try {
         setStatus(statusEl, "Mentés...", true);
-        const body = { widget_config: readConfigFromForm() };
+        readThemeFromForm();
+        readCopyFromForm();
+        readBubbleFromForm();
 
-        const res = await adminFetch(`/api/admin/widget-config/${encodeURIComponent(currentSiteKey)}`,{
-          method:"POST",
-          headers:{ "Content-Type":"application/json" },
-          body: JSON.stringify(body)
+        const res = await adminFetch(`/api/admin/full-widget-config/${encodeURIComponent(currentSiteKey)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ config: currentFullConfig }),
         });
 
-        if(!res || !res.ok){
+        if (!res || !res.ok) {
           const err = await (res ? res.json().catch(() => ({})) : Promise.resolve({}));
           throw new Error(err.error || "Ismeretlen hiba");
         }
 
         setStatus(statusEl, "Mentve ✔", true);
+        postPreview();
         setTimeout(() => setStatus(statusEl, "", null), 2200);
-      }catch(e){
+      } catch(e) {
         console.error(e);
-        setStatus(statusEl, "Hiba mentésnél: " + e.message, false);
+        setStatus(statusEl, "Hiba: " + e.message, false);
       }
     }
 
-    async function resetConfig(){
+    async function resetConfig() {
+      const ok = confirm("Biztosan visszaállítod alapra? Minden mező és szín default-ra áll.");
+      if (!ok) return;
       const statusEl = document.getElementById("saveStatus");
-      const ok = confirm("Biztosan visszaállítod alapra? (A widget_config törlődik, és a widget default designra áll.)");
-      if(!ok) return;
-
-      try{
+      try {
         setStatus(statusEl, "Visszaállítás...", true);
-
-        const res = await adminFetch(`/api/admin/widget-config/${encodeURIComponent(currentSiteKey)}/reset`,{
-          method:"POST"
-        });
-
-        if(!res || !res.ok){
-          const err = await (res ? res.json().catch(() => ({})) : Promise.resolve({}));
-          throw new Error(err.error || "Ismeretlen hiba");
-        }
-
+        const res = await adminFetch(`/api/admin/full-widget-config/${encodeURIComponent(currentSiteKey)}/reset`, { method: "POST" });
+        if (!res || !res.ok) throw new Error("Hiba");
         await loadConfigFor(currentSiteKey);
         setStatus(statusEl, "Visszaállítva ✅", true);
         setTimeout(() => setStatus(statusEl, "", null), 2200);
-      }catch(e){
-        console.error(e);
-        setStatus(statusEl, "Hiba visszaállításnál: " + e.message, false);
+      } catch(e) {
+        setStatus(statusEl, "Hiba: " + e.message, false);
       }
     }
 
+    async function applyPreset(presetName) {
+      const ok = confirm(`"${presetName}" preset alkalmazása? A jelenlegi beállítások felülíródnak!`);
+      if (!ok) return;
+      const statusEl = document.getElementById("saveStatus");
+      try {
+        setStatus(statusEl, "Preset alkalmazása...", true);
+        const res = await adminFetch(`/api/admin/full-widget-config/${encodeURIComponent(currentSiteKey)}/apply-preset`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ preset: presetName }),
+        });
+        if (!res || !res.ok) throw new Error("Hiba");
+        await loadConfigFor(currentSiteKey);
+        setStatus(statusEl, `${presetName} preset alkalmazva ✅`, true);
+        postPreview();
+        setTimeout(() => setStatus(statusEl, "", null), 2500);
+      } catch(e) {
+        setStatus(statusEl, "Hiba: " + e.message, false);
+      }
+    }
+
+    // ========== TABS ==========
+    function switchTab(tabId) {
+      document.querySelectorAll(".mv-tab").forEach(t => t.classList.toggle("active", t.dataset.tab === tabId));
+      document.querySelectorAll(".mv-tab-content").forEach(c => c.classList.toggle("active", c.id === "tab-" + tabId));
+    }
+
+    // ========== FIELD LIST ==========
+    function renderFieldList() {
+      const container = document.getElementById("fieldList");
+      container.innerHTML = "";
+      const fields = currentFullConfig.form.fields;
+
+      fields.sort((a, b) => (a.order || 0) - (b.order || 0));
+
+      fields.forEach((field, idx) => {
+        const item = document.createElement("div");
+        item.className = "field-item";
+        item.draggable = true;
+        item.dataset.idx = idx;
+
+        // Drag handle
+        const handle = document.createElement("span");
+        handle.className = "field-handle";
+        handle.textContent = "⠿";
+
+        // Info
+        const info = document.createElement("div");
+        info.className = "field-info";
+        const typeLabel = FIELD_TYPES.find(ft => ft.value === field.type);
+        const mappingLabel = MAPPING_TARGETS.find(mt => mt.value === (field.mapping && field.mapping.target));
+        info.innerHTML =
+          `<div class="field-info-label">${escapeHtml(field.label || field.id)}</div>` +
+          `<div class="field-info-meta">${escapeHtml(field.id)} · ${typeLabel ? typeLabel.label : field.type}${mappingLabel ? ' → ' + mappingLabel.label : ''}</div>`;
+
+        // Toggle
+        const toggle = document.createElement("button");
+        toggle.className = "field-toggle" + (field.enabled !== false ? " on" : "");
+        toggle.title = field.enabled !== false ? "Aktív" : "Kikapcsolva";
+        toggle.onclick = () => {
+          field.enabled = !field.enabled;
+          renderFieldList();
+          postPreview();
+        };
+
+        // Edit button
+        const editBtn = document.createElement("button");
+        editBtn.className = "mv-btn mv-btn-secondary mv-btn-sm";
+        editBtn.textContent = "✏️";
+        editBtn.title = "Szerkesztés";
+        editBtn.onclick = () => openFieldEditor(idx);
+
+        // Duplicate
+        const dupBtn = document.createElement("button");
+        dupBtn.className = "mv-btn mv-btn-secondary mv-btn-sm";
+        dupBtn.textContent = "📋";
+        dupBtn.title = "Duplikálás";
+        dupBtn.onclick = () => {
+          const copy = JSON.parse(JSON.stringify(field));
+          copy.id = field.id + "_copy_" + Date.now().toString(36);
+          copy.order = (field.order || 0) + 1;
+          fields.splice(idx + 1, 0, copy);
+          renderFieldList();
+          postPreview();
+        };
+
+        // Delete
+        const delBtn = document.createElement("button");
+        delBtn.className = "mv-btn mv-btn-danger mv-btn-sm";
+        delBtn.textContent = "🗑️";
+        delBtn.title = "Törlés";
+        delBtn.onclick = () => {
+          if (confirm(`"${field.label || field.id}" mező törlése?`)) {
+            fields.splice(idx, 1);
+            renderFieldList();
+            postPreview();
+          }
+        };
+
+        // Move up/down
+        const upBtn = document.createElement("button");
+        upBtn.className = "mv-btn mv-btn-secondary mv-btn-sm";
+        upBtn.textContent = "↑";
+        upBtn.disabled = idx === 0;
+        upBtn.onclick = () => { moveField(idx, -1); };
+
+        const downBtn = document.createElement("button");
+        downBtn.className = "mv-btn mv-btn-secondary mv-btn-sm";
+        downBtn.textContent = "↓";
+        downBtn.disabled = idx === fields.length - 1;
+        downBtn.onclick = () => { moveField(idx, 1); };
+
+        const actions = document.createElement("div");
+        actions.className = "field-actions";
+        actions.appendChild(upBtn);
+        actions.appendChild(downBtn);
+        actions.appendChild(toggle);
+        actions.appendChild(editBtn);
+        actions.appendChild(dupBtn);
+        actions.appendChild(delBtn);
+
+        item.appendChild(handle);
+        item.appendChild(info);
+        item.appendChild(actions);
+        container.appendChild(item);
+
+        // Drag events
+        item.addEventListener("dragstart", e => { e.dataTransfer.setData("text/plain", idx); item.classList.add("dragging"); });
+        item.addEventListener("dragend", () => item.classList.remove("dragging"));
+        item.addEventListener("dragover", e => e.preventDefault());
+        item.addEventListener("drop", e => {
+          e.preventDefault();
+          const fromIdx = parseInt(e.dataTransfer.getData("text/plain"));
+          if (isNaN(fromIdx) || fromIdx === idx) return;
+          const moved = fields.splice(fromIdx, 1)[0];
+          fields.splice(fromIdx < idx ? idx : idx, 0, moved);
+          recomputeOrder();
+          renderFieldList();
+          postPreview();
+        });
+      });
+    }
+
+    function moveField(idx, dir) {
+      const fields = currentFullConfig.form.fields;
+      const newIdx = idx + dir;
+      if (newIdx < 0 || newIdx >= fields.length) return;
+      const tmp = fields[idx];
+      fields[idx] = fields[newIdx];
+      fields[newIdx] = tmp;
+      recomputeOrder();
+      renderFieldList();
+      postPreview();
+    }
+
+    function recomputeOrder() {
+      currentFullConfig.form.fields.forEach((f, i) => { f.order = (i + 1) * 10; });
+    }
+
+    function addNewField() {
+      const fields = currentFullConfig.form.fields;
+      const newId = "field_" + Date.now().toString(36);
+      fields.push({
+        id: newId,
+        type: "text",
+        label: "Új mező",
+        placeholder: "",
+        enabled: true,
+        required: false,
+        order: (fields.length + 1) * 10,
+        mapping: { target: "user.free_text", format: "raw", appendToFreeText: true },
+      });
+      recomputeOrder();
+      renderFieldList();
+      openFieldEditor(fields.length - 1);
+    }
+
+    // ========== FIELD EDITOR MODAL ==========
+    function openFieldEditor(idx) {
+      const field = currentFullConfig.form.fields[idx];
+      if (!field) return;
+
+      const overlay = document.createElement("div");
+      overlay.className = "modal-overlay";
+
+      const box = document.createElement("div");
+      box.className = "modal-box";
+
+      const hasOptions = ["select", "multiselect", "radio", "checkbox", "chips"].includes(field.type);
+      const hasMinMax = ["number", "range", "slider"].includes(field.type);
+
+      let optionsHtml = "";
+      if (hasOptions) {
+        const opts = field.options || [];
+        optionsHtml = `
+          <hr class="sep"/>
+          <h3>Opciók</h3>
+          <div class="opt-list" id="modal-options">
+            ${opts.map((o, i) => `
+              <div class="opt-item">
+                <input type="text" placeholder="value" value="${escapeHtml(o.value)}" data-role="opt-value" data-i="${i}" style="max-width:120px;"/>
+                <input type="text" placeholder="label" value="${escapeHtml(o.label)}" data-role="opt-label" data-i="${i}" />
+                <button class="opt-remove" data-i="${i}" title="Törlés">&times;</button>
+              </div>
+            `).join("")}
+          </div>
+          <button class="mv-btn mv-btn-secondary mv-btn-sm" id="modal-add-option">+ Opció hozzáadása</button>
+        `;
+      }
+
+      let minMaxHtml = "";
+      if (hasMinMax) {
+        minMaxHtml = `
+          <div class="mv-input-row">
+            <div class="mv-input-group"><label>Min</label><input type="number" id="modal-min" value="${field.min !== undefined ? field.min : ''}"/></div>
+            <div class="mv-input-group"><label>Max</label><input type="number" id="modal-max" value="${field.max !== undefined ? field.max : ''}"/></div>
+            <div class="mv-input-group"><label>Step</label><input type="number" id="modal-step" value="${field.step !== undefined ? field.step : ''}"/></div>
+          </div>
+        `;
+      }
+
+      const mapping = field.mapping || {};
+
+      box.innerHTML = `
+        <h2>Mező szerkesztése: ${escapeHtml(field.label || field.id)}</h2>
+        <div class="mv-input-row">
+          <div class="mv-input-group"><label>Azonosító (id)</label><input type="text" id="modal-id" value="${escapeHtml(field.id)}"/></div>
+          <div class="mv-input-group"><label>Típus</label>
+            <select id="modal-type">${FIELD_TYPES.map(ft => `<option value="${ft.value}" ${ft.value === field.type ? 'selected' : ''}>${ft.label}</option>`).join("")}</select>
+          </div>
+        </div>
+        <div class="mv-input-row">
+          <div class="mv-input-group"><label>Label</label><input type="text" id="modal-label" value="${escapeHtml(field.label || '')}"/></div>
+        </div>
+        <div class="mv-input-row">
+          <div class="mv-input-group"><label>Placeholder</label><input type="text" id="modal-placeholder" value="${escapeHtml(field.placeholder || '')}"/></div>
+          <div class="mv-input-group"><label>Default érték</label><input type="text" id="modal-default" value="${escapeHtml(field.defaultValue || '')}"/></div>
+        </div>
+        <div class="mv-input-row">
+          <div class="mv-input-group"><label>Segítő szöveg</label><input type="text" id="modal-helper" value="${escapeHtml(field.helperText || '')}"/></div>
+        </div>
+        <div class="mv-input-row">
+          <div class="mv-input-group" style="max-width:100px;">
+            <label>Kötelező</label>
+            <select id="modal-required"><option value="false" ${!field.required ? 'selected' : ''}>Nem</option><option value="true" ${field.required ? 'selected' : ''}>Igen</option></select>
+          </div>
+          <div class="mv-input-group" style="max-width:160px;">
+            <label>Layout csoport</label>
+            <input type="text" id="modal-group" value="${escapeHtml(field.layout && field.layout.group ? field.layout.group : '')}" placeholder="pl. budget"/>
+          </div>
+        </div>
+        ${minMaxHtml}
+        ${optionsHtml}
+
+        <hr class="sep"/>
+        <h3>🔗 Mapping (API leképezés)</h3>
+        <div class="mapping-grid">
+          <div class="mv-input-group"><label>Target</label>
+            <select id="modal-mapping-target">${MAPPING_TARGETS.map(mt => `<option value="${mt.value}" ${mt.value === mapping.target ? 'selected' : ''}>${mt.label}</option>`).join("")}</select>
+          </div>
+          <div class="mv-input-group"><label>Format</label>
+            <select id="modal-mapping-format">${MAPPING_FORMATS.map(mf => `<option value="${mf.value}" ${mf.value === mapping.format ? 'selected' : ''}>${mf.label}</option>`).join("")}</select>
+          </div>
+        </div>
+        <div class="mv-input-row" style="margin-top:6px;">
+          <div class="mv-input-group" style="max-width:200px;">
+            <label>Append to free_text?</label>
+            <select id="modal-mapping-append"><option value="false" ${!mapping.appendToFreeText ? 'selected' : ''}>Nem</option><option value="true" ${mapping.appendToFreeText ? 'selected' : ''}>Igen</option></select>
+          </div>
+          <div class="mv-input-group" style="max-width:120px;">
+            <label>Súly (weight)</label>
+            <input type="number" id="modal-mapping-weight" step="0.1" min="0" max="5" value="${mapping.weight !== undefined ? mapping.weight : ''}"/>
+          </div>
+        </div>
+        <div class="mv-input-row" style="margin-top:6px;">
+          <div class="mv-input-group" style="max-width:200px;">
+            <label>🎯 Prioritás</label>
+            <select id="modal-mapping-priority">
+              <option value="" ${!mapping.priority ? 'selected' : ''}>Nincs (nem constraint)</option>
+              <option value="must_have" ${mapping.priority === 'must_have' ? 'selected' : ''}>Must-have (hard filter)</option>
+              <option value="preference" ${mapping.priority === 'preference' ? 'selected' : ''}>Preference (soft boost)</option>
+            </select>
+          </div>
+          <div class="mv-input-group" style="max-width:200px;">
+            <label>🔍 Constraint típus</label>
+            <select id="modal-mapping-constraint-type">
+              <option value="" ${!mapping.constraintType ? 'selected' : ''}>Nincs</option>
+              <option value="exact" ${mapping.constraintType === 'exact' ? 'selected' : ''}>Exact (pontos egyezés)</option>
+              <option value="contains" ${mapping.constraintType === 'contains' ? 'selected' : ''}>Contains (tartalmazza)</option>
+              <option value="in" ${mapping.constraintType === 'in' ? 'selected' : ''}>In (lista egyezés)</option>
+              <option value="range" ${mapping.constraintType === 'range' ? 'selected' : ''}>Range (tartomány)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mv-inline-actions" style="margin-top:16px;">
+          <button class="mv-btn mv-btn-primary" id="modal-save">💾 Mentés</button>
+          <button class="mv-btn mv-btn-secondary" id="modal-cancel">Mégse</button>
+        </div>
+      `;
+
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+
+      // Close on overlay click
+      overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+
+      // Cancel
+      box.querySelector("#modal-cancel").onclick = () => overlay.remove();
+
+      // Add option button
+      const addOptBtn = box.querySelector("#modal-add-option");
+      if (addOptBtn) {
+        addOptBtn.onclick = () => {
+          const list = box.querySelector("#modal-options");
+          const i = list.children.length;
+          const item = document.createElement("div");
+          item.className = "opt-item";
+          item.innerHTML = `
+            <input type="text" placeholder="value" data-role="opt-value" data-i="${i}" style="max-width:120px;"/>
+            <input type="text" placeholder="label" data-role="opt-label" data-i="${i}" />
+            <button class="opt-remove" data-i="${i}" title="Törlés">&times;</button>
+          `;
+          list.appendChild(item);
+          item.querySelector(".opt-remove").onclick = () => item.remove();
+        };
+      }
+
+      // Option remove buttons
+      box.querySelectorAll(".opt-remove").forEach(btn => {
+        btn.onclick = () => btn.closest(".opt-item").remove();
+      });
+
+      // Save
+      box.querySelector("#modal-save").onclick = () => {
+        field.id = box.querySelector("#modal-id").value.trim() || field.id;
+        field.type = box.querySelector("#modal-type").value;
+        field.label = box.querySelector("#modal-label").value;
+        field.placeholder = box.querySelector("#modal-placeholder").value;
+        field.helperText = box.querySelector("#modal-helper").value;
+        field.required = box.querySelector("#modal-required").value === "true";
+
+        const defVal = box.querySelector("#modal-default").value;
+        field.defaultValue = defVal || undefined;
+
+        const group = box.querySelector("#modal-group").value.trim();
+        if (group) {
+          field.layout = { group };
+        } else {
+          delete field.layout;
+        }
+
+        // Min/Max/Step
+        const minEl = box.querySelector("#modal-min");
+        const maxEl = box.querySelector("#modal-max");
+        const stepEl = box.querySelector("#modal-step");
+        if (minEl) field.min = minEl.value !== "" ? Number(minEl.value) : undefined;
+        if (maxEl) field.max = maxEl.value !== "" ? Number(maxEl.value) : undefined;
+        if (stepEl) field.step = stepEl.value !== "" ? Number(stepEl.value) : undefined;
+
+        // Options
+        const optItems = box.querySelectorAll(".opt-item");
+        if (optItems.length > 0) {
+          field.options = [];
+          optItems.forEach(item => {
+            const v = item.querySelector('[data-role="opt-value"]').value.trim();
+            const l = item.querySelector('[data-role="opt-label"]').value.trim();
+            if (v || l) field.options.push({ value: v || l, label: l || v });
+          });
+        }
+
+        // Mapping
+        field.mapping = {
+          target: box.querySelector("#modal-mapping-target").value,
+          format: box.querySelector("#modal-mapping-format").value,
+          appendToFreeText: box.querySelector("#modal-mapping-append").value === "true",
+        };
+        const weightVal = box.querySelector("#modal-mapping-weight").value;
+        if (weightVal !== "") field.mapping.weight = Number(weightVal);
+        const priorityVal = box.querySelector("#modal-mapping-priority").value;
+        if (priorityVal) field.mapping.priority = priorityVal;
+        const constraintTypeVal = box.querySelector("#modal-mapping-constraint-type").value;
+        if (constraintTypeVal) field.mapping.constraintType = constraintTypeVal;
+
+        overlay.remove();
+        renderFieldList();
+        postPreview();
+      };
+    }
+
+    // ========== THEME FORM ==========
+    function fillThemeForm() {
+      const t = currentFullConfig.ui.theme;
+      // Position
+      const posEl = document.getElementById("bubblePositionSelect");
+      if (posEl) posEl.value = t.bubblePosition || "bottom-right";
+      // Offsets
+      const oxEl = document.getElementById("bubbleOffsetX");
+      if (oxEl) oxEl.value = t.bubbleOffsetX !== undefined ? t.bubbleOffsetX : 8;
+      const oyEl = document.getElementById("bubbleOffsetY");
+      if (oyEl) oyEl.value = t.bubbleOffsetY !== undefined ? t.bubbleOffsetY : 8;
+      // Currency
+      const curEl = document.getElementById("currencySelect");
+      if (curEl) curEl.value = t.currency || "HUF";
+      const pairs = [
+        ["bubbleBg", t.bubbleBg || "#3b82f6"],
+        ["bubbleText", t.bubbleText || "#ffffff"],
+        ["panelBg", t.backgroundColor || "#ffffff"],
+        ["panelText", t.textColor || "#0F172A"],
+        ["buttonBg", t.buttonBg || "#6366F1"],
+        ["buttonText", t.buttonText || "#ffffff"],
+        ["accent", t.accentColor || "#6366F1"],
+        ["headerStart", t.headerGradStart || "#6366F1"],
+        ["headerEnd", t.headerGradEnd || "#3B82F6"],
+      ];
+      pairs.forEach(([prefix, val]) => {
+        const colorEl = document.getElementById(prefix + "Color");
+        const hexEl = document.getElementById(prefix + "Hex");
+        if (colorEl) colorEl.value = val;
+        if (hexEl) hexEl.value = val;
+      });
+    }
+
+    function readThemeFromForm() {
+      const t = currentFullConfig.ui.theme;
+      // Position
+      const posEl = document.getElementById("bubblePositionSelect");
+      if (posEl) t.bubblePosition = posEl.value || "bottom-right";
+      // Offsets
+      const oxEl = document.getElementById("bubbleOffsetX");
+      if (oxEl) t.bubbleOffsetX = Number(oxEl.value) || 8;
+      const oyEl = document.getElementById("bubbleOffsetY");
+      if (oyEl) t.bubbleOffsetY = Number(oyEl.value) || 8;
+      // Currency
+      const curEl = document.getElementById("currencySelect");
+      if (curEl) t.currency = curEl.value || "HUF";
+      const map = {
+        bubbleBg: "bubbleBg", bubbleText: "bubbleText",
+        panelBg: "backgroundColor", panelText: "textColor",
+        buttonBg: "buttonBg", buttonText: "buttonText",
+        accent: "accentColor", headerStart: "headerGradStart", headerEnd: "headerGradEnd",
+      };
+      Object.entries(map).forEach(([prefix, configKey]) => {
+        const hexEl = document.getElementById(prefix + "Hex");
+        if (hexEl && isHexColor(hexEl.value)) t[configKey] = hexEl.value.trim();
+      });
+      t.primaryColor = t.accentColor;
+    }
+
+    function hookColorPair(prefix) {
+      const colorEl = document.getElementById(prefix + "Color");
+      const hexEl = document.getElementById(prefix + "Hex");
+      if (!colorEl || !hexEl) return;
+
+      colorEl.addEventListener("input", () => {
+        hexEl.value = colorEl.value;
+        readThemeFromForm();
+        postPreview();
+      });
+      hexEl.addEventListener("input", () => {
+        if (isHexColor(hexEl.value)) {
+          colorEl.value = hexEl.value.trim();
+          readThemeFromForm();
+          postPreview();
+        }
+      });
+    }
+
+    // ========== COPY FORM ==========
+    function fillCopyForm() {
+      const c = currentFullConfig.ui.copy;
+      document.getElementById("copyPanelTitle").value = c.panelTitle || "";
+      document.getElementById("copyPanelSubtitle").value = c.panelSubtitle || "";
+      document.getElementById("copyHelpText").value = c.helpText || "";
+      document.getElementById("copySubmitText").value = c.submitText || "";
+      document.getElementById("copyResetText").value = c.resetText || "";
+      document.getElementById("copyLoadingText").value = c.loadingText || "";
+      document.getElementById("copyEmptyText").value = c.emptyStateText || "";
+      document.getElementById("copyErrorText").value = c.errorText || "";
+      document.getElementById("copyConsentText").value = c.consentText || "";
+      document.getElementById("copyFooterText").value = c.footerText || "";
+    }
+
+    function readCopyFromForm() {
+      const c = currentFullConfig.ui.copy;
+      c.panelTitle = document.getElementById("copyPanelTitle").value;
+      c.panelSubtitle = document.getElementById("copyPanelSubtitle").value;
+      c.helpText = document.getElementById("copyHelpText").value;
+      c.submitText = document.getElementById("copySubmitText").value;
+      c.resetText = document.getElementById("copyResetText").value;
+      c.loadingText = document.getElementById("copyLoadingText").value;
+      c.emptyStateText = document.getElementById("copyEmptyText").value;
+      c.errorText = document.getElementById("copyErrorText").value;
+      c.consentText = document.getElementById("copyConsentText").value;
+      c.footerText = document.getElementById("copyFooterText").value;
+    }
+
+    // ========== BUBBLE FORM ==========
+    function fillBubbleForm() {
+      const texts = currentFullConfig.bubble && currentFullConfig.bubble.texts ? currentFullConfig.bubble.texts : [];
+      document.getElementById("bubbleTexts").value = texts.join("\n");
+    }
+
+    function readBubbleFromForm() {
+      if (!currentFullConfig.bubble) currentFullConfig.bubble = {};
+      currentFullConfig.bubble.texts = (document.getElementById("bubbleTexts").value || "")
+        .split("\n").map(s => s.trim()).filter(Boolean);
+    }
+
+    // ========== INIT ==========
     window.addEventListener("DOMContentLoaded", async () => {
-      const bubbleFrame = document.getElementById("preview-bubble");
-      const panelFrame  = document.getElementById("preview-panel");
+      // Preview
+      document.getElementById("preview-bubble").addEventListener("load", () => { previewBubbleReady = true; postPreview(); });
+      document.getElementById("preview-panel").addEventListener("load", () => { previewPanelReady = true; postPreview(); });
 
-      bubbleFrame.addEventListener("load", () => {
-        previewBubbleReady = true;
-        postPreview();
+      // Nav
+      document.getElementById("backBtn").addEventListener("click", () => { window.location.href = "/admin.html"; });
+      document.getElementById("siteKeySelect").addEventListener("change", async (e) => { await loadConfigFor(e.target.value); });
+
+      // Tabs
+      document.querySelectorAll(".mv-tab").forEach(tab => {
+        tab.addEventListener("click", () => switchTab(tab.dataset.tab));
       });
 
-      panelFrame.addEventListener("load", () => {
-        previewPanelReady = true;
-        postPreview();
-      });
-
-      document.getElementById("backBtn").addEventListener("click", () => {
-        window.location.href = "/admin.html";
-      });
-
-      document.getElementById("siteKeySelect").addEventListener("change", async (e) => {
-        await loadConfigFor(e.target.value);
-      });
-
+      // Buttons
       document.getElementById("saveBtn").addEventListener("click", saveConfig);
       document.getElementById("resetBtn").addEventListener("click", resetConfig);
+      document.getElementById("addFieldBtn").addEventListener("click", addNewField);
 
-      hookLive();
+      // Presets
+      document.getElementById("presetGeneric").addEventListener("click", () => applyPreset("generic"));
+      document.getElementById("presetFashion").addEventListener("click", () => applyPreset("fashion"));
+      document.getElementById("presetElectronics").addEventListener("click", () => applyPreset("electronics"));
+      document.getElementById("presetGift").addEventListener("click", () => applyPreset("gift"));
+
+      // Color pairs
+      ["bubbleBg", "bubbleText", "panelBg", "panelText", "buttonBg", "buttonText", "accent", "headerStart", "headerEnd"].forEach(hookColorPair);
+
+      // Bubble position change
+      const posSelect = document.getElementById("bubblePositionSelect");
+      if (posSelect) posSelect.addEventListener("change", () => { readThemeFromForm(); postPreview(); });
+
+      // Bubble offsets
+      const oxEl = document.getElementById("bubbleOffsetX");
+      if (oxEl) oxEl.addEventListener("input", () => { readThemeFromForm(); postPreview(); });
+      const oyEl = document.getElementById("bubbleOffsetY");
+      if (oyEl) oyEl.addEventListener("input", () => { readThemeFromForm(); postPreview(); });
+
+      // Currency change
+      const curSelect = document.getElementById("currencySelect");
+      if (curSelect) curSelect.addEventListener("change", () => { readThemeFromForm(); postPreview(); });
+
+      // Live copy updates
+      ["copyPanelTitle", "copyPanelSubtitle", "copyHelpText", "copySubmitText", "copyResetText",
+       "copyLoadingText", "copyEmptyText", "copyErrorText", "copyConsentText", "copyFooterText", "bubbleTexts"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener("input", () => { readCopyFromForm(); readBubbleFromForm(); postPreview(); });
+      });
+
       await loadPartnersAndCatalogs();
     });
   </script>
@@ -588,191 +938,204 @@
   <div class="mv-container">
     <div class="mv-topbar">
       <div>
-        <h1>Widget szerkesztő</h1>
-        <div class="mv-small">Katalógusonként állítható felhő/panel színek és szövegek, élő előnézettel.</div>
+        <h1>🛠️ Widget szerkesztő V2</h1>
+        <div class="mv-small">Általános, séma-vezérelt widget builder. Bármilyen webshop típushoz.</div>
       </div>
-      <button id="backBtn" class="mv-btn mv-btn-secondary">Vissza az adminhoz</button>
+      <button id="backBtn" class="mv-btn mv-btn-secondary">← Vissza az adminhoz</button>
     </div>
 
+    <!-- SITE KEY SELECTOR -->
     <div class="mv-card">
       <div class="mv-input-row">
-        <div class="mv-input-group" style="max-width: 380px;">
+        <div class="mv-input-group" style="max-width:380px;">
           <label>Katalógus kiválasztása</label>
           <select id="siteKeySelect"></select>
         </div>
-      </div>
-    </div>
-
-    <div class="grid2">
-      <div class="mv-card">
-        <h2>Szövegek</h2>
-
-        <div class="mv-input-row">
-          <div class="mv-input-group">
-            <label>Panel cím</label>
-            <input id="panelTitle" type="text" />
-          </div>
-          <div class="mv-input-group">
-            <label>Panel alcím</label>
-            <input id="panelSubtitle" type="text" />
-          </div>
-        </div>
-
-        <div class="mv-input-row">
-          <div class="mv-input-group">
-            <label>Érdeklődés placeholder</label>
-            <input id="interestPh" type="text" />
-          </div>
-        </div>
-
-        <div class="mv-input-row">
-          <div class="mv-input-group">
-            <label>Részletek (textarea) placeholder</label>
-            <input id="detailsPh" type="text" />
-          </div>
-        </div>
-
-        <div class="mv-input-row">
-          <div class="mv-input-group">
-            <label>Felhő szövegek (1 sor = 1 szöveg, automatikusan váltogat)</label>
-            <textarea id="bubbleTexts"></textarea>
-          </div>
-        </div>
-
-        <div class="mv-inline-actions">
-          <button id="saveBtn" class="mv-btn mv-btn-primary">Mentés</button>
-          <button id="resetBtn" class="mv-btn mv-btn-danger">Vissza alapra</button>
-          <div class="mv-actions-spacer"></div>
+        <div style="display:flex; align-items:flex-end; gap:8px; padding-bottom:1px;">
+          <button id="saveBtn" class="mv-btn mv-btn-primary">💾 Mentés</button>
+          <button id="resetBtn" class="mv-btn mv-btn-danger">Visszaállítás</button>
           <div id="saveStatus" class="mv-status mv-save-feedback"></div>
         </div>
       </div>
+    </div>
+
+    <!-- PRESETS -->
+    <div class="mv-card">
+      <h3>🎨 Presetekből indulás</h3>
+      <div class="mv-small" style="margin-bottom:8px;">Egy kattintás – teljes konfiguráció (mezők + szövegek + színek) adott webshop-típushoz.</div>
+      <div class="preset-bar">
+        <button id="presetGeneric" class="mv-btn mv-btn-secondary">🏪 Általános</button>
+        <button id="presetFashion" class="mv-btn mv-btn-preset">👗 Ruhabolt</button>
+        <button id="presetElectronics" class="mv-btn mv-btn-preset" style="background:#0ea5e9;">🖥️ Elektronika</button>
+        <button id="presetGift" class="mv-btn mv-btn-preset" style="background:#f59e0b;">🎁 Ajándék</button>
+      </div>
+    </div>
+
+    <!-- TABS -->
+    <div class="mv-tabs">
+      <div class="mv-tab active" data-tab="fields">📋 Mezők</div>
+      <div class="mv-tab" data-tab="copy">📝 Szövegek</div>
+      <div class="mv-tab" data-tab="theme">🎨 Színek</div>
+      <div class="mv-tab" data-tab="bubble">☁️ Felhő</div>
+      <div class="mv-tab" data-tab="preview">👁️ Előnézet</div>
+    </div>
+
+    <!-- TAB: FIELDS -->
+    <div class="mv-tab-content active" id="tab-fields">
+      <div class="mv-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div>
+            <h2>Form mezők</h2>
+            <div class="mv-small">Húzd a ⠿ fogantyút a sorrend változtatásához. Kattints ✏️-re a szerkesztéshez.</div>
+          </div>
+          <button id="addFieldBtn" class="mv-btn mv-btn-primary">+ Új mező</button>
+        </div>
+        <div class="field-list" id="fieldList"></div>
+      </div>
+    </div>
+
+    <!-- TAB: COPY -->
+    <div class="mv-tab-content" id="tab-copy">
+      <div class="mv-card">
+        <h2>📝 Widget szövegek</h2>
+        <div class="mv-small" style="margin-bottom:10px;">Panel cím, gomb feliratok, üzenetek. Változtatás azonnal látszik az előnézetben.</div>
+
+        <div class="mv-input-row">
+          <div class="mv-input-group"><label>Panel cím</label><input id="copyPanelTitle" type="text" /></div>
+          <div class="mv-input-group"><label>Panel alcím</label><input id="copyPanelSubtitle" type="text" /></div>
+        </div>
+        <div class="mv-input-row">
+          <div class="mv-input-group"><label>Segítő szöveg</label><input id="copyHelpText" type="text" /></div>
+        </div>
+        <div class="mv-input-row">
+          <div class="mv-input-group"><label>Submit gomb</label><input id="copySubmitText" type="text" /></div>
+          <div class="mv-input-group"><label>Reset gomb</label><input id="copyResetText" type="text" /></div>
+        </div>
+        <div class="mv-input-row">
+          <div class="mv-input-group"><label>Betöltés szöveg</label><input id="copyLoadingText" type="text" /></div>
+          <div class="mv-input-group"><label>Üres eredmény</label><input id="copyEmptyText" type="text" /></div>
+        </div>
+        <div class="mv-input-row">
+          <div class="mv-input-group"><label>Hiba szöveg</label><input id="copyErrorText" type="text" /></div>
+        </div>
+        <div class="mv-input-row">
+          <div class="mv-input-group"><label>Hozzájárulás (consent)</label><input id="copyConsentText" type="text" placeholder="opcionális"/></div>
+          <div class="mv-input-group"><label>Footer szöveg</label><input id="copyFooterText" type="text" placeholder="opcionális"/></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: THEME -->
+    <div class="mv-tab-content" id="tab-theme">
+      <div class="mv-card">
+        <h2>📍 Felhő pozíció</h2>
+        <div class="mv-small" style="margin-bottom:8px;">A felhő gomb elhelyezkedése az oldalon.</div>
+        <div class="mv-input-row">
+          <div class="mv-input-group" style="max-width:260px;">
+            <label>Pozíció</label>
+            <select id="bubblePositionSelect">
+              <option value="bottom-right">↘ Jobb alsó (alapértelmezett)</option>
+              <option value="bottom-left">↙ Bal alsó</option>
+              <option value="top-right">↗ Jobb felső</option>
+              <option value="top-left">↖ Bal felső</option>
+            </select>
+          </div>
+          <div class="mv-input-group" style="max-width:140px;">
+            <label>Eltolás X (px)</label>
+            <input id="bubbleOffsetX" type="number" min="0" max="200" value="8" />
+          </div>
+          <div class="mv-input-group" style="max-width:140px;">
+            <label>Eltolás Y (px)</label>
+            <input id="bubbleOffsetY" type="number" min="0" max="200" value="8" />
+          </div>
+        </div>
+      </div>
 
       <div class="mv-card">
-        <h2>Színek</h2>
-        <div class="mv-small">Színválasztó vagy HEX mező. HEX akkor frissít, ha érvényes (pl. <b>#1d4ed8</b>).</div>
+        <h2>💱 Pénznem</h2>
+        <div class="mv-small" style="margin-bottom:8px;">Az ár-megjelenítés és a költségkeret mező pénzneme.</div>
+        <div class="mv-input-row">
+          <div class="mv-input-group" style="max-width:260px;">
+            <label>Pénznem</label>
+            <select id="currencySelect">
+              <option value="HUF">🇭🇺 Forint (Ft)</option>
+              <option value="EUR">🇪🇺 Euró (€)</option>
+              <option value="USD">🇺🇸 Dollár ($)</option>
+            </select>
+          </div>
+        </div>
+      </div>
 
+      <div class="mv-card">
+        <h2>🎨 Színek</h2>
+        <div class="mv-small" style="margin-bottom:8px;">Színválasztó vagy HEX kód. Változtatás azonnal frissíti az előnézetet.</div>
         <div class="color-grid">
           <div class="color-row">
-            <div class="color-meta">
-              <div class="color-title">Felhő háttér</div>
-              <div class="color-desc">A felhő színátmenetének alapja</div>
-            </div>
-            <div class="color-controls">
-              <input id="bubbleBg" type="color" value="#3b82f6" />
-              <input id="bubbleBgHex" class="color-hex" type="text" value="#3b82f6" />
-            </div>
+            <div class="color-meta"><div class="color-title">Felhő háttér</div><div class="color-desc">A felhő színátmenet alapja</div></div>
+            <div class="color-controls"><input id="bubbleBgColor" type="color" value="#3b82f6"/><input id="bubbleBgHex" class="color-hex" type="text" value="#3b82f6"/></div>
           </div>
-
           <div class="color-row">
-            <div class="color-meta">
-              <div class="color-title">Felhő szöveg</div>
-              <div class="color-desc">A felhőben megjelenő szöveg színe</div>
-            </div>
-            <div class="color-controls">
-              <input id="bubbleText" type="color" value="#ffffff" />
-              <input id="bubbleTextHex" class="color-hex" type="text" value="#ffffff" />
-            </div>
+            <div class="color-meta"><div class="color-title">Felhő szöveg</div><div class="color-desc">Szöveg a felhőben</div></div>
+            <div class="color-controls"><input id="bubbleTextColor" type="color" value="#ffffff"/><input id="bubbleTextHex" class="color-hex" type="text" value="#ffffff"/></div>
           </div>
-
           <div class="color-row">
-            <div class="color-meta">
-              <div class="color-title">Panel háttér</div>
-              <div class="color-desc">A panel (kártya) alap háttere</div>
-            </div>
-            <div class="color-controls">
-              <input id="panelBg" type="color" value="#ffffff" />
-              <input id="panelBgHex" class="color-hex" type="text" value="#ffffff" />
-            </div>
+            <div class="color-meta"><div class="color-title">Panel háttér</div><div class="color-desc">A panel alap háttérszíne</div></div>
+            <div class="color-controls"><input id="panelBgColor" type="color" value="#ffffff"/><input id="panelBgHex" class="color-hex" type="text" value="#ffffff"/></div>
           </div>
-
           <div class="color-row">
-            <div class="color-meta">
-              <div class="color-title">Panel szöveg</div>
-              <div class="color-desc">Panelen belüli szövegek színe</div>
-            </div>
-            <div class="color-controls">
-              <input id="panelText" type="color" value="#0F172A" />
-              <input id="panelTextHex" class="color-hex" type="text" value="#0F172A" />
-            </div>
+            <div class="color-meta"><div class="color-title">Panel szöveg</div><div class="color-desc">Szövegek színe a panelen</div></div>
+            <div class="color-controls"><input id="panelTextColor" type="color" value="#0F172A"/><input id="panelTextHex" class="color-hex" type="text" value="#0F172A"/></div>
           </div>
-
           <div class="color-row">
-            <div class="color-meta">
-              <div class="color-title">Gomb háttér</div>
-              <div class="color-desc">Ajánlatot kérek gomb színátmenetének alapja</div>
-            </div>
-            <div class="color-controls">
-              <input id="buttonBg" type="color" value="#6366F1" />
-              <input id="buttonBgHex" class="color-hex" type="text" value="#6366F1" />
-            </div>
+            <div class="color-meta"><div class="color-title">Gomb háttér</div><div class="color-desc">Submit gomb gradient alapja</div></div>
+            <div class="color-controls"><input id="buttonBgColor" type="color" value="#6366F1"/><input id="buttonBgHex" class="color-hex" type="text" value="#6366F1"/></div>
           </div>
-
           <div class="color-row">
-            <div class="color-meta">
-              <div class="color-title">Gomb szöveg</div>
-              <div class="color-desc">Gombon lévő felirat színe</div>
-            </div>
-            <div class="color-controls">
-              <input id="buttonText" type="color" value="#ffffff" />
-              <input id="buttonTextHex" class="color-hex" type="text" value="#ffffff" />
-            </div>
+            <div class="color-meta"><div class="color-title">Gomb szöveg</div><div class="color-desc">Gomb felirat színe</div></div>
+            <div class="color-controls"><input id="buttonTextColor" type="color" value="#ffffff"/><input id="buttonTextHex" class="color-hex" type="text" value="#ffffff"/></div>
           </div>
-
           <div class="color-row">
-            <div class="color-meta">
-              <div class="color-title">Accent</div>
-              <div class="color-desc">Kiemelések, fókusz keret, ár színek</div>
-            </div>
-            <div class="color-controls">
-              <input id="accent" type="color" value="#6366F1" />
-              <input id="accentHex" class="color-hex" type="text" value="#6366F1" />
-            </div>
+            <div class="color-meta"><div class="color-title">Accent</div><div class="color-desc">Kiemelések, fókusz, árak</div></div>
+            <div class="color-controls"><input id="accentColor" type="color" value="#6366F1"/><input id="accentHex" class="color-hex" type="text" value="#6366F1"/></div>
           </div>
-
           <div class="color-row">
-            <div class="color-meta">
-              <div class="color-title">Header gradient – start</div>
-              <div class="color-desc">Panel fejléc átmenet (bal felső)</div>
-            </div>
-            <div class="color-controls">
-              <input id="headerStart" type="color" value="#6366F1" />
-              <input id="headerStartHex" class="color-hex" type="text" value="#6366F1" />
-            </div>
+            <div class="color-meta"><div class="color-title">Header gradient – start</div><div class="color-desc">Fejléc átmenet (bal felső)</div></div>
+            <div class="color-controls"><input id="headerStartColor" type="color" value="#6366F1"/><input id="headerStartHex" class="color-hex" type="text" value="#6366F1"/></div>
           </div>
-
           <div class="color-row">
-            <div class="color-meta">
-              <div class="color-title">Header gradient – end</div>
-              <div class="color-desc">Panel fejléc átmenet (jobb alsó)</div>
-            </div>
-            <div class="color-controls">
-              <input id="headerEnd" type="color" value="#3B82F6" />
-              <input id="headerEndHex" class="color-hex" type="text" value="#3B82F6" />
-            </div>
+            <div class="color-meta"><div class="color-title">Header gradient – end</div><div class="color-desc">Fejléc átmenet (jobb alsó)</div></div>
+            <div class="color-controls"><input id="headerEndColor" type="color" value="#3B82F6"/><input id="headerEndHex" class="color-hex" type="text" value="#3B82F6"/></div>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="mv-card">
-      <h2>Előnézet</h2>
+    <!-- TAB: BUBBLE -->
+    <div class="mv-tab-content" id="tab-bubble">
+      <div class="mv-card">
+        <h2>☁️ Felhő szövegek</h2>
+        <div class="mv-small" style="margin-bottom:8px;">Soronként 1 szöveg. A widget véletlenszerűen választ egyet.</div>
+        <div class="mv-input-group">
+          <textarea id="bubbleTexts" rows="8"></textarea>
+        </div>
+      </div>
+    </div>
 
-      <div class="previewGrid">
-        <div>
-          <div class="previewBoxTitle">Felhő előnézet</div>
-          <div class="previewWrap previewWrap--bubble" data-vw="520" data-vh="240">
-            <div class="previewStage">
-              <iframe id="preview-bubble" title="Bubble preview" scrolling="no"></iframe>
+    <!-- TAB: PREVIEW -->
+    <div class="mv-tab-content" id="tab-preview">
+      <div class="mv-card">
+        <h2>👁️ Előnézet</h2>
+        <div class="previewGrid">
+          <div>
+            <div class="previewBoxTitle">Felhő előnézet</div>
+            <div class="previewWrap previewWrap--bubble" data-vw="520" data-vh="240">
+              <div class="previewStage"><iframe id="preview-bubble" title="Bubble preview" scrolling="no"></iframe></div>
             </div>
           </div>
-        </div>
-
-        <div>
-          <div class="previewBoxTitle">Panel előnézet (nyitva)</div>
-          <!-- ✅ magasabb + a "virtuális" méretet úgy állítjuk, hogy nagyobbnak hasson -->
-          <div class="previewWrap previewWrap--panel" data-vw="900" data-vh="760">
-            <div class="previewStage">
-              <iframe id="preview-panel" title="Panel preview" scrolling="no"></iframe>
+          <div>
+            <div class="previewBoxTitle">Panel előnézet (nyitva)</div>
+            <div class="previewWrap previewWrap--panel" data-vw="900" data-vh="760">
+              <div class="previewStage"><iframe id="preview-panel" title="Panel preview" scrolling="no"></iframe></div>
             </div>
           </div>
         </div>
@@ -782,34 +1145,23 @@
   </div>
 
   <script>
-    function fitPreview(wrap){
+    function fitPreview(wrap) {
       const stage = wrap.querySelector(".previewStage");
       const iframe = stage.querySelector("iframe");
-
       const vw = Number(wrap.dataset.vw || 1200);
       const vh = Number(wrap.dataset.vh || 760);
-
       iframe.style.width = vw + "px";
       iframe.style.height = vh + "px";
-
       const W = wrap.clientWidth;
       const H = wrap.clientHeight;
-
-      // ✅ engedjük 1 fölé is (nagyítás), de mindig arányosan
       const scale = Math.min(W / vw, H / vh);
-
       const left = Math.max(0, (W - vw * scale) / 2);
-      const top  = Math.max(0, (H - vh * scale) / 2);
-
+      const top = Math.max(0, (H - vh * scale) / 2);
       stage.style.left = left + "px";
       stage.style.top = top + "px";
       stage.style.transform = `scale(${scale})`;
     }
-
-    function fitAll(){
-      document.querySelectorAll(".previewWrap").forEach(fitPreview);
-    }
-
+    function fitAll() { document.querySelectorAll(".previewWrap").forEach(fitPreview); }
     const ro = new ResizeObserver(() => fitAll());
     window.addEventListener("load", () => {
       document.querySelectorAll(".previewWrap").forEach(w => ro.observe(w));

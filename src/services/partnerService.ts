@@ -39,6 +39,35 @@ export interface WidgetConfig {
   theme?: WidgetTheme;
 }
 
+/**
+ * Widget panel szövegek – boltonként testreszabható az admin widget-szerkesztőben.
+ * Ha nincs beállítva (null/undefined), a widget default szöveget használ.
+ */
+export interface WidgetCopy {
+  panelTitle?: string;
+  panelSubtitle?: string;
+  budgetLabel?: string;
+  interestLabel?: string;
+  detailsLabel?: string;
+  interestPlaceholder?: string;
+  detailsPlaceholder?: string;
+  submitText?: string;
+  resetText?: string;
+  helpText?: string;
+}
+
+/**
+ * Widget mezők ki/be kapcsolása – boltonként testreszabható.
+ */
+export interface WidgetFields {
+  showBudget?: boolean;
+  showInterests?: boolean;
+  showGender?: boolean;
+  showRelationship?: boolean;
+  showFreeText?: boolean;
+  showAge?: boolean;
+}
+
 export interface Partner {
   id: string;
   name: string;
@@ -47,11 +76,52 @@ export interface Partner {
   created_at: string;
   blocked?: boolean;
 
-  // ✅ ÚJ: megengedett domain lista (CORS whitelist)
+  // ✅ Megengedett domain lista (CORS whitelist)
   allowed_domains?: string[];
 
-  // ✅ ÚJ: widget config per partner/katalógus
+  // ✅ Widget config per partner/katalógus
   widget_config?: WidgetConfig;
+
+  // ✅ Boltonként testreszabható widget szövegek
+  widget_copy?: WidgetCopy | null;
+
+  // ✅ Widget mezők ki/be kapcsolása
+  widget_fields?: WidgetFields | null;
+
+  // ✅ Relevancia beállítások (szín/típus attribute matching)
+  relevance?: RelevanceConfig | null;
+
+  // ✅ Widget séma (fashion preset, extra mezők)
+  widget_schema?: WidgetSchema | null;
+
+  // ✅ ÚJ: általános, schema-driven widget konfig (v2)
+  full_widget_config?: any | null;
+}
+
+/**
+ * Relevancia beállítások – boltonként konfigurálható.
+ */
+export interface RelevanceConfig {
+  strictColorMatch?: boolean;
+  strictTypeMatch?: boolean;
+  boostColorWeight?: number;
+  boostEmbeddingWeight?: number;
+  boostPopularityWeight?: number;
+}
+
+/**
+ * Widget séma – fashion preset support.
+ */
+export interface WidgetSchema {
+  preset?: "generic" | "fashion";
+  fashionFields?: {
+    showColorPicker?: boolean;
+    showTypePicker?: boolean;
+    showSizePicker?: boolean;
+    colorOptions?: string[];
+    typeOptions?: string[];
+    sizeOptions?: string[];
+  };
 }
 
 // ✅ Render persistent disk támogatás
@@ -292,6 +362,13 @@ function loadFromDisk(): Partner[] {
         blocked: Boolean(p.blocked) || false,
         allowed_domains: normalizeDomainList(p.allowed_domains),
         widget_config,
+        // ✅ widget_copy, widget_fields, relevance, widget_schema megőrzése
+        widget_copy: p.widget_copy || null,
+        widget_fields: p.widget_fields || null,
+        relevance: p.relevance || null,
+        widget_schema: p.widget_schema || null,
+        // ✅ ÚJ: full_widget_config (v2 schema-driven)
+        full_widget_config: p.full_widget_config || null,
       };
     });
 
@@ -507,5 +584,260 @@ export function authenticatePartner(siteKey: string, apiKey: string): Partner | 
   if (String(p.api_key || "").trim() !== provided) return null;
 
   return p;
+}
+
+// ===================== WIDGET COPY / FIELDS (ADMIN) =====================
+
+/**
+ * ✅ Widget panel szövegek lekérése (widget_copy).
+ * Ha nincs beállítva, null-t ad vissza → a widget default szöveget használ.
+ */
+export function getPartnerWidgetCopy(siteKey: string): WidgetCopy | null {
+  partners = loadFromDisk();
+  const p = partners.find((x) => x.site_key === (siteKey || "").trim());
+  if (!p) return null;
+  return p.widget_copy || null;
+}
+
+/**
+ * ✅ Widget panel szövegek mentése (widget_copy).
+ */
+export function setPartnerWidgetCopy(siteKey: string, copy: any): Partner | null {
+  partners = loadFromDisk();
+  const key = (siteKey || "").trim();
+  if (!key) return null;
+
+  const partner = partners.find((p) => p.site_key === key);
+  if (!partner) return null;
+
+  // Sanitize: csak string mezőket tartunk meg
+  const safe: WidgetCopy = {};
+  const copyFields: (keyof WidgetCopy)[] = [
+    "panelTitle", "panelSubtitle", "budgetLabel", "interestLabel",
+    "detailsLabel", "interestPlaceholder", "detailsPlaceholder",
+    "submitText", "resetText", "helpText",
+  ];
+  for (const f of copyFields) {
+    if (copy && typeof copy[f] === "string") {
+      (safe as any)[f] = copy[f].trim();
+    }
+  }
+
+  partner.widget_copy = Object.keys(safe).length > 0 ? safe : null;
+  saveToDisk();
+
+  console.log(`[partnerService] widget_copy mentve: site_key="${partner.site_key}"`);
+  return partner;
+}
+
+/**
+ * ✅ Widget mezők ki/be kapcsolása lekérése (widget_fields).
+ */
+export function getPartnerWidgetFields(siteKey: string): WidgetFields | null {
+  partners = loadFromDisk();
+  const p = partners.find((x) => x.site_key === (siteKey || "").trim());
+  if (!p) return null;
+  return p.widget_fields || null;
+}
+
+/**
+ * ✅ Widget mezők ki/be kapcsolása mentése (widget_fields).
+ */
+export function setPartnerWidgetFields(siteKey: string, fields: any): Partner | null {
+  partners = loadFromDisk();
+  const key = (siteKey || "").trim();
+  if (!key) return null;
+
+  const partner = partners.find((p) => p.site_key === key);
+  if (!partner) return null;
+
+  const safe: WidgetFields = {};
+  const boolFields: (keyof WidgetFields)[] = [
+    "showBudget", "showInterests", "showGender",
+    "showRelationship", "showFreeText", "showAge",
+  ];
+  for (const f of boolFields) {
+    if (fields && typeof fields[f] === "boolean") {
+      (safe as any)[f] = fields[f];
+    }
+  }
+
+  partner.widget_fields = Object.keys(safe).length > 0 ? safe : null;
+  saveToDisk();
+
+  console.log(`[partnerService] widget_fields mentve: site_key="${partner.site_key}"`);
+  return partner;
+}
+
+// ===================== RELEVANCE SETTINGS =====================
+
+/**
+ * ✅ Relevancia beállítások lekérése.
+ */
+export function getPartnerRelevance(siteKey: string): RelevanceConfig | null {
+  partners = loadFromDisk();
+  const p = partners.find((x) => x.site_key === (siteKey || "").trim());
+  if (!p) return null;
+  return p.relevance || null;
+}
+
+/**
+ * ✅ Relevancia beállítások mentése.
+ */
+export function setPartnerRelevance(siteKey: string, relevance: any): Partner | null {
+  partners = loadFromDisk();
+  const key = (siteKey || "").trim();
+  if (!key) return null;
+
+  const partner = partners.find((p) => p.site_key === key);
+  if (!partner) return null;
+
+  const safe: RelevanceConfig = {};
+
+  if (relevance && typeof relevance.strictColorMatch === "boolean") {
+    safe.strictColorMatch = relevance.strictColorMatch;
+  }
+  if (relevance && typeof relevance.strictTypeMatch === "boolean") {
+    safe.strictTypeMatch = relevance.strictTypeMatch;
+  }
+  if (relevance && typeof relevance.boostColorWeight === "number") {
+    safe.boostColorWeight = Math.max(0, Math.min(1, relevance.boostColorWeight));
+  }
+  if (relevance && typeof relevance.boostEmbeddingWeight === "number") {
+    safe.boostEmbeddingWeight = Math.max(0, Math.min(1, relevance.boostEmbeddingWeight));
+  }
+  if (relevance && typeof relevance.boostPopularityWeight === "number") {
+    safe.boostPopularityWeight = Math.max(0, Math.min(1, relevance.boostPopularityWeight));
+  }
+
+  partner.relevance = Object.keys(safe).length > 0 ? safe : null;
+  saveToDisk();
+
+  console.log(`[partnerService] relevance mentve: site_key="${partner.site_key}"`);
+  return partner;
+}
+
+// ===================== WIDGET SCHEMA =====================
+
+/** Default fashion preset értékek */
+const DEFAULT_FASHION_SCHEMA: WidgetSchema = {
+  preset: "fashion",
+  fashionFields: {
+    showColorPicker: true,
+    showTypePicker: true,
+    showSizePicker: true,
+    colorOptions: [
+      "Fekete", "Fehér", "Kék", "Sötétkék", "Piros", "Rózsaszín",
+      "Zöld", "Sárga", "Narancs", "Lila", "Barna", "Szürke",
+      "Bézs", "Bordó", "Türkiz",
+    ],
+    typeOptions: [
+      "Póló", "Pulóver", "Hoodie", "Ing", "Kabát", "Dzseki",
+      "Nadrág", "Farmer", "Rövidnadrág", "Szoknya", "Ruha",
+      "Cipő", "Kiegészítő", "Sportruha",
+    ],
+    sizeOptions: ["XS", "S", "M", "L", "XL", "XXL"],
+  },
+};
+
+/**
+ * ✅ Widget séma lekérése.
+ */
+export function getPartnerWidgetSchema(siteKey: string): WidgetSchema | null {
+  partners = loadFromDisk();
+  const p = partners.find((x) => x.site_key === (siteKey || "").trim());
+  if (!p) return null;
+  return p.widget_schema || null;
+}
+
+/**
+ * ✅ Widget séma mentése.
+ */
+export function setPartnerWidgetSchema(siteKey: string, schema: any): Partner | null {
+  partners = loadFromDisk();
+  const key = (siteKey || "").trim();
+  if (!key) return null;
+
+  const partner = partners.find((p) => p.site_key === key);
+  if (!partner) return null;
+
+  if (!schema) {
+    partner.widget_schema = null;
+  } else {
+    const safe: WidgetSchema = {
+      preset: schema.preset === "fashion" ? "fashion" : "generic",
+    };
+
+    if (schema.preset === "fashion") {
+      const ff = schema.fashionFields || {};
+      safe.fashionFields = {
+        showColorPicker: ff.showColorPicker !== false,
+        showTypePicker: ff.showTypePicker !== false,
+        showSizePicker: ff.showSizePicker !== false,
+        colorOptions: Array.isArray(ff.colorOptions)
+          ? ff.colorOptions.map((x: any) => String(x).trim()).filter(Boolean)
+          : DEFAULT_FASHION_SCHEMA.fashionFields!.colorOptions,
+        typeOptions: Array.isArray(ff.typeOptions)
+          ? ff.typeOptions.map((x: any) => String(x).trim()).filter(Boolean)
+          : DEFAULT_FASHION_SCHEMA.fashionFields!.typeOptions,
+        sizeOptions: Array.isArray(ff.sizeOptions)
+          ? ff.sizeOptions.map((x: any) => String(x).trim()).filter(Boolean)
+          : DEFAULT_FASHION_SCHEMA.fashionFields!.sizeOptions,
+      };
+    }
+
+    partner.widget_schema = safe;
+  }
+
+  saveToDisk();
+  console.log(`[partnerService] widget_schema mentve: site_key="${partner.site_key}"`);
+  return partner;
+}
+
+/**
+ * ✅ Fashion preset alkalmazása (beállítja a widget_schema-t + relevance-t egyben).
+ */
+export function applyFashionPreset(siteKey: string): Partner | null {
+  const partner = setPartnerWidgetSchema(siteKey, DEFAULT_FASHION_SCHEMA);
+  if (!partner) return null;
+
+  // Fashion preset: default relevance is beállítjuk
+  setPartnerRelevance(siteKey, {
+    strictColorMatch: true,
+    strictTypeMatch: false,
+    boostColorWeight: 0.30,
+    boostEmbeddingWeight: 0.55,
+    boostPopularityWeight: 0.15,
+  });
+
+  // Fashion widget copy defaults
+  const currentCopy = getPartnerWidgetCopy(siteKey);
+  if (!currentCopy || !currentCopy.panelTitle) {
+    setPartnerWidgetCopy(siteKey, {
+      panelTitle: "Stílusajánló",
+      panelSubtitle: "Válassz színt, típust, méretet – megtaláljuk a tökéletes darabot!",
+      interestLabel: "Stílus / szín / fazon",
+      interestPlaceholder: "pl. sportos, elegáns, sötétkék",
+      detailsPlaceholder: "pl. szereti a laza stílust, minimalista...",
+      submitText: "✨ Mutasd az ajánlatokat",
+    });
+  }
+
+  // Fashion widget fields: interest és free_text maradjon, relationship ki
+  setPartnerWidgetFields(siteKey, {
+    showBudget: true,
+    showInterests: true,
+    showGender: true,
+    showRelationship: false,
+    showFreeText: true,
+    showAge: false,
+  });
+
+  return findPartnerBySiteKey(siteKey);
+}
+
+/** ✅ Default fashion schema getter (admin UI-hoz) */
+export function getDefaultFashionSchema(): WidgetSchema {
+  return JSON.parse(JSON.stringify(DEFAULT_FASHION_SCHEMA));
 }
 

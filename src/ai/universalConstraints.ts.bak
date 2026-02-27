@@ -1,0 +1,725 @@
+// src/ai/universalConstraints.ts
+//
+// Universal Constraints Engine — domain-agnostic product filtering & scoring.
+// Works for any shop domain: fashion, electronics, cosmetics, books, gifts, etc.
+//
+// Pipeline:
+//   1. Extract constraints from UserContext + WidgetConfig field mappings
+//   2. Hard-filter by must_have constraints (budget, brand, category, etc.)
+//   3. Soft-score by preference constraints (color, style, features)
+//   4. Combined scoring: embedding * w_embed + constraint * w_constraint + popularity * w_pop
+//   5. Dedupe by base product
+//   6. Diversity pass: max N similar sub-type items
+//   7. Debug report
+
+import { Product } from "../models/Product";
+import { UserContext } from "../models/UserContext";
+import { FullWidgetConfig, FieldMapping, ConstraintPriority, ConstraintType } from "../config/widgetConfig";
+import {
+  extractProductSignals,
+  extractUserSignals,
+  ProductSignals,
+  UserSignals,
+  fuzzyContains,
+  tokenOverlap,
+} from "./signals";
+import { baseId } from "./queryUtils";
+
+/* ===================================================================
+ * 1) CONSTRAINT TYPES
+ * =================================================================== */
+
+export interface Constraint {
+  /** The field ID that generated this constraint */
+  fieldId: string;
+  /** must_have = hard filter, preference = soft score boost */
+  priority: ConstraintPriority;
+  /** How to match: exact, range, contains, in */
+  constraintType: ConstraintType;
+  /** The user-provided value(s) for this constraint */
+  value: any;
+  /** Weight multiplier for scoring (default 1.0) */
+  weight: number;
+  /** Which product data this constraint targets (derived from mapping.target) */
+  target: string;
+}
+
+export interface ConstraintMatchResult {
+  /** Overall constraint score 0..1 */
+  constraintScore: number;
+  /** Per-constraint match details */
+  matches: { fieldId: string; matched: boolean; score: number; reason: string }[];
+  /** Was hard-filtered out by a must_have constraint? */
+  hardFiltered: boolean;
+  /** Reason for hard filtering */
+  hardFilterReason: string;
+}
+
+export interface ScoredProduct {
+  product: Product;
+  embeddingScore: number;
+  constraintScore: number;
+  popularityScore: number;
+  finalScore: number;
+  constraintDetail: ConstraintMatchResult;
+}
+
+export interface ConstraintEngineConfig {
+  /** Weight for embedding similarity (default 0.50) */
+  wEmbed: number;
+  /** Weight for constraint matching (default 0.35) */
+  wConstraint: number;
+  /** Weight for popularity/position (default 0.15) */
+  wPop: number;
+  /** Max items per base product in dedupe (default 1) */
+  maxPerBase: number;
+  /** Max items of same sub-category in diversity pass (default 4) */
+  maxSameSubType: number;
+  /** Enable graceful fallback when too few results after hard filter */
+  gracefulFallback: boolean;
+  /** Minimum result count before triggering fallback */
+  fallbackMinResults: number;
+}
+
+const DEFAULT_ENGINE_CONFIG: ConstraintEngineConfig = {
+  wEmbed: 0.40,
+  wConstraint: 0.45,
+  wPop: 0.15,
+  maxPerBase: 1,
+  maxSameSubType: 4,
+  gracefulFallback: true,
+  fallbackMinResults: 6,
+};
+
+/* ===================================================================
+ * 2) EXTRACT CONSTRAINTS FROM USER + WIDGET CONFIG
+ * =================================================================== */
+
+/**
+ * Build a list of active constraints from the UserContext combined
+ * with the widget config field mappings. Only fields with non-empty
+ * user values that have priority + constraintType generate constraints.
+ *
+ * Also generates implicit constraints from standard UserContext fields
+ * (budget, gender, age) even without widget config.
+ */
+export function extractConstraints(
+  user: UserContext,
+  widgetConfig?: FullWidgetConfig | null,
+): Constraint[] {
+  const constraints: Constraint[] = [];
+
+  // --- Implicit constraints from standard UserContext fields ---
+
+  // Budget range (always must_have if provided)
+  if (user.budget_min != null || user.budget_max != null) {
+    constraints.push({
+      fieldId: "_budget",
+      priority: "must_have",
+      constraintType: "range",
+      value: { min: user.budget_min ?? 0, max: user.budget_max ?? Infinity },
+      weight: 1.0,
+      target: "price",
+    });
+  }
+
+  // Age restriction (must_have: under-18 filtering)
+  if (user.age != null && user.age < 18) {
+    constraints.push({
+      fieldId: "_age_restriction",
+      priority: "must_have",
+      constraintType: "exact",
+      value: "age_restricted",
+      weight: 1.0,
+      target: "_age_gate",
+    });
+  }
+
+  // --- Widget config-driven constraints ---
+  if (widgetConfig?.form?.fields) {
+    for (const field of widgetConfig.form.fields) {
+      if (!field.enabled || !field.mapping) continue;
+      const mapping = field.mapping;
+      if (!mapping.priority || !mapping.constraintType) continue;
+
+      // Determine the user value for this field based on mapping target
+      const userValue = getUserValueForField(user, field.id, mapping);
+      if (userValue === null || userValue === undefined || userValue === "") continue;
+
+      constraints.push({
+        fieldId: field.id,
+        priority: mapping.priority,
+        constraintType: mapping.constraintType,
+        value: userValue,
+        weight: mapping.weight ?? 1.0,
+        target: resolveConstraintTarget(field.id, mapping),
+      });
+    }
+  }
+
+  // --- Free-text driven constraints (implicit preference) ---
+  // The free_text and interests are used by the embedding similarity,
+  // but we also extract them as a soft "contains" preference for
+  // the constraint engine to boost products that contain user keywords.
+  // Only add this if no explicit widget-driven constraints were extracted.
+  const userSignals = extractUserSignals(user);
+  const hasExplicitConstraints = constraints.some(c => c.fieldId !== "_budget" && c.fieldId !== "_age_restriction");
+  if (userSignals.queryTokens.length > 0 && !hasExplicitConstraints) {
+    constraints.push({
+      fieldId: "_query_relevance",
+      priority: "preference",
+      constraintType: "contains",
+      value: userSignals.queryText,
+      weight: 0.5,
+      target: "searchableText",
+    });
+  }
+
+  return constraints;
+}
+
+/**
+ * Resolve what product field a constraint should match against.
+ */
+function resolveConstraintTarget(fieldId: string, mapping: FieldMapping): string {
+  // Known field IDs → specific product fields
+  const fieldTargets: Record<string, string> = {
+    color: "searchableText",
+    clothing_type: "searchableText",
+    size: "searchableText",
+    brand: "brand",
+    category: "category",
+    occasion: "searchableText",
+  };
+
+  if (fieldTargets[fieldId]) return fieldTargets[fieldId];
+
+  // Mapping target hints
+  switch (mapping.target) {
+    case "user.budget_min":
+    case "user.budget_max":
+      return "price";
+    case "user.gender":
+      return "searchableText";
+    case "user.category":
+      return "category";
+    default:
+      return "searchableText";
+  }
+}
+
+/**
+ * Get the value the user provided for a given field.
+ * Looks at both explicit fields and standard UserContext properties.
+ * For fields with appendToFreeText, scans the free_text and interests.
+ */
+function getUserValueForField(
+  user: UserContext,
+  fieldId: string,
+  mapping: FieldMapping,
+): any {
+  switch (mapping.target) {
+    case "user.gender":
+      return user.gender && user.gender !== "unknown" ? user.gender : null;
+    case "user.age":
+      return user.age;
+    case "user.budget_min":
+      return user.budget_min;
+    case "user.budget_max":
+      return user.budget_max;
+    case "user.relationship":
+      return user.relationship;
+    case "user.interests":
+    case "user.free_text":
+    case "user.category":
+      // For appendToFreeText fields, the widget merges the selected value
+      // into free_text or interests. We reconstruct by scanning both.
+      if (mapping.appendToFreeText) {
+        const allText = [
+          user.free_text || "",
+          ...(user.interests || []),
+        ].join(" ").trim();
+        return allText || null;
+      }
+      // For direct interests mapping (not appended), check if interests array has values
+      if (mapping.target === "user.interests" && user.interests && user.interests.length > 0) {
+        return user.interests.join(" ");
+      }
+      if (mapping.target === "user.free_text" && user.free_text) {
+        return user.free_text;
+      }
+      return null;
+    default:
+      return null;
+  }
+}
+
+/* ===================================================================
+ * 3) CONSTRAINT MATCHING
+ * =================================================================== */
+
+/**
+ * Match a single product against all constraints.
+ * Returns a ConstraintMatchResult with overall score and per-constraint details.
+ */
+function matchProductConstraints(
+  productSignals: ProductSignals,
+  constraints: Constraint[],
+): ConstraintMatchResult {
+  const matches: { fieldId: string; matched: boolean; score: number; reason: string }[] = [];
+  let hardFiltered = false;
+  let hardFilterReason = "";
+
+  const mustHaves = constraints.filter(c => c.priority === "must_have");
+  const preferences = constraints.filter(c => c.priority === "preference");
+
+  // --- Must-have constraints: all must pass, or product is filtered out ---
+  for (const c of mustHaves) {
+    const result = evaluateConstraint(c, productSignals);
+    matches.push({ fieldId: c.fieldId, matched: result.matched, score: result.score, reason: result.reason });
+
+    if (!result.matched) {
+      hardFiltered = true;
+      hardFilterReason = `${c.fieldId}: ${result.reason}`;
+      break; // No need to check further must-haves
+    }
+  }
+
+  // --- Preference constraints: contribute to soft score ---
+  let prefScoreSum = 0;
+  let prefWeightSum = 0;
+
+  for (const c of preferences) {
+    const result = evaluateConstraint(c, productSignals);
+    matches.push({ fieldId: c.fieldId, matched: result.matched, score: result.score, reason: result.reason });
+    prefScoreSum += result.score * c.weight;
+    prefWeightSum += c.weight;
+  }
+
+  // Constraint score: weighted average of preference scores (0..1)
+  // Must-haves don't contribute to score — they're binary pass/fail.
+  const constraintScore = prefWeightSum > 0 ? prefScoreSum / prefWeightSum : 0.5;
+
+  return {
+    constraintScore: Math.max(0, Math.min(1, constraintScore)),
+    matches,
+    hardFiltered,
+    hardFilterReason,
+  };
+}
+
+/**
+ * Evaluate a single constraint against product signals.
+ */
+function evaluateConstraint(
+  constraint: Constraint,
+  signals: ProductSignals,
+): { matched: boolean; score: number; reason: string } {
+  const { constraintType, value, target } = constraint;
+
+  // Special handler for age gate
+  if (target === "_age_gate") {
+    const restricted = ["alcohol", "erotic", "18+", "adult"].some(
+      cat => signals.category.includes(cat) || signals.tags.some(t => t.includes(cat))
+    );
+    return restricted
+      ? { matched: false, score: 0, reason: "age restricted product" }
+      : { matched: true, score: 1, reason: "age ok" };
+  }
+
+  // Get the product value for this target
+  const productValue = getProductValueForTarget(signals, target);
+
+  switch (constraintType) {
+    case "exact":
+      return evaluateExact(value, productValue, target);
+    case "range":
+      return evaluateRange(value, signals);
+    case "contains":
+      return evaluateContains(value, productValue);
+    case "in":
+      return evaluateIn(value, productValue);
+    default:
+      return { matched: true, score: 0.5, reason: "unknown constraint type" };
+  }
+}
+
+function getProductValueForTarget(signals: ProductSignals, target: string): string {
+  switch (target) {
+    case "brand": return signals.brand;
+    case "category": return signals.category;
+    case "productType": return signals.productType;
+    case "searchableText": return signals.searchableText;
+    case "tags": return signals.tags.join(" ");
+    case "name": return signals.nameTokens.join(" ");
+    default: return signals.searchableText;
+  }
+}
+
+function evaluateExact(
+  userValue: any,
+  productValue: string,
+  target: string,
+): { matched: boolean; score: number; reason: string } {
+  const uv = String(userValue).toLowerCase().trim();
+  const pv = productValue.toLowerCase();
+
+  if (pv.includes(uv)) {
+    return { matched: true, score: 1.0, reason: `exact match: "${uv}" found in ${target}` };
+  }
+
+  // Fuzzy match with accent stripping
+  if (fuzzyContains(pv, uv)) {
+    return { matched: true, score: 0.85, reason: `fuzzy match: "${uv}" in ${target}` };
+  }
+
+  return { matched: false, score: 0, reason: `no match: "${uv}" not in ${target}` };
+}
+
+function evaluateRange(
+  value: any,
+  signals: ProductSignals,
+): { matched: boolean; score: number; reason: string } {
+  const min = value?.min ?? 0;
+  const max = value?.max ?? Infinity;
+  const price = signals.price;
+
+  if (price <= 0) {
+    return { matched: true, score: 0.3, reason: "no price data, passing" };
+  }
+
+  if (price >= min && price <= max) {
+    // Score higher for prices in the middle of the range
+    const range = max === Infinity ? price * 2 : max - min;
+    const mid = min + range / 2;
+    const dist = Math.abs(price - mid) / (range / 2 || 1);
+    const score = Math.max(0.5, 1 - dist * 0.3);
+    return { matched: true, score, reason: `price ${price} in range [${min}, ${max === Infinity ? "∞" : max}]` };
+  }
+
+  // Slightly out of range: within 20% tolerance for soft preference
+  const tolerance = (max === Infinity ? min : max) * 0.2;
+  if (price >= min - tolerance && price <= (max === Infinity ? Infinity : max + tolerance)) {
+    return { matched: false, score: 0.2, reason: `price ${price} near range [${min}, ${max === Infinity ? "∞" : max}]` };
+  }
+
+  return { matched: false, score: 0, reason: `price ${price} out of range [${min}, ${max === Infinity ? "∞" : max}]` };
+}
+
+function evaluateContains(
+  userValue: any,
+  productValue: string,
+): { matched: boolean; score: number; reason: string } {
+  const uv = String(userValue).toLowerCase().trim();
+  if (!uv) return { matched: true, score: 0.5, reason: "empty user value" };
+
+  // Split user value into tokens and check overlap
+  const tokens = uv.split(/\s+/).filter(t => t.length > 1);
+  if (tokens.length === 0) return { matched: true, score: 0.5, reason: "no tokens" };
+
+  const pv = productValue.toLowerCase();
+  let hits = 0;
+  for (const token of tokens) {
+    if (pv.includes(token) || fuzzyContains(pv, token)) {
+      hits++;
+    }
+  }
+
+  const overlap = hits / tokens.length;
+  if (overlap >= 0.5) {
+    return { matched: true, score: 0.5 + overlap * 0.5, reason: `contains ${hits}/${tokens.length} tokens` };
+  }
+  if (hits > 0) {
+    return { matched: false, score: overlap * 0.4, reason: `partial match ${hits}/${tokens.length} tokens` };
+  }
+
+  return { matched: false, score: 0, reason: `no token overlap` };
+}
+
+function evaluateIn(
+  userValue: any,
+  productValue: string,
+): { matched: boolean; score: number; reason: string } {
+  // "in" constraint: userValue is a list of acceptable values
+  const values: string[] = Array.isArray(userValue)
+    ? userValue.map(v => String(v).toLowerCase().trim())
+    : String(userValue).split(",").map(v => v.trim().toLowerCase());
+
+  const pv = productValue.toLowerCase();
+
+  for (const v of values) {
+    if (v && (pv.includes(v) || fuzzyContains(pv, v))) {
+      return { matched: true, score: 1.0, reason: `"${v}" found (in-list match)` };
+    }
+  }
+
+  return { matched: false, score: 0, reason: `none of [${values.join(",")}] found` };
+}
+
+/* ===================================================================
+ * 4) UNIVERSAL SCORING PIPELINE
+ * =================================================================== */
+
+/**
+ * Run the full universal constraint pipeline:
+ *   1. Extract constraints from user + widgetConfig
+ *   2. Score each embedding-ranked candidate
+ *   3. Hard-filter must_have fails
+ *   4. Combined scoring
+ *   5. Sort by finalScore
+ *   6. Dedupe by base product
+ *   7. Diversity pass
+ *   8. Graceful fallback if too few results
+ */
+export function universalScoreAndRank(
+  user: UserContext,
+  embeddingRanked: { product: Product; score: number }[],
+  widgetConfig?: FullWidgetConfig | null,
+  configOverrides?: Partial<ConstraintEngineConfig>,
+): { results: ScoredProduct[]; constraints: Constraint[]; debug: DebugReport } {
+  const cfg = { ...DEFAULT_ENGINE_CONFIG, ...configOverrides };
+  const constraints = extractConstraints(user, widgetConfig);
+  const hasConstraints = constraints.some(c => c.fieldId !== "_query_relevance");
+
+  // Normalize weights to sum = 1
+  let { wEmbed, wConstraint, wPop } = cfg;
+  if (!hasConstraints) {
+    // No structured constraints → shift weight to embedding
+    wConstraint = 0;
+    wEmbed += cfg.wConstraint;
+  }
+  const wSum = wEmbed + wConstraint + wPop;
+  wEmbed /= wSum;
+  wConstraint /= wSum;
+  wPop /= wSum;
+
+  // Normalize embedding scores to 0..1
+  const embedScores = embeddingRanked.map(r => r.score);
+  const maxEmbed = Math.max(...embedScores, 0.001);
+  const minEmbed = Math.min(...embedScores, 0);
+  const embedRange = maxEmbed - minEmbed || 1;
+  const totalCandidates = embeddingRanked.length;
+
+  // Score all candidates
+  const scored: ScoredProduct[] = [];
+  const hardFilteredProducts: { product: Product; reason: string }[] = [];
+
+  for (let i = 0; i < embeddingRanked.length; i++) {
+    const { product, score: rawEmbed } = embeddingRanked[i];
+    const embedNorm = (rawEmbed - minEmbed) / embedRange;
+    const popScore = 1 - (i / totalCandidates) * 0.7; // position-based
+
+    const signals = extractProductSignals(product);
+    const constraintResult = matchProductConstraints(signals, constraints);
+
+    if (constraintResult.hardFiltered) {
+      hardFilteredProducts.push({ product, reason: constraintResult.hardFilterReason });
+      continue;
+    }
+
+    const finalScore =
+      wEmbed * embedNorm +
+      wConstraint * constraintResult.constraintScore +
+      wPop * popScore;
+
+    scored.push({
+      product,
+      embeddingScore: embedNorm,
+      constraintScore: constraintResult.constraintScore,
+      popularityScore: popScore,
+      finalScore,
+      constraintDetail: constraintResult,
+    });
+  }
+
+  // Sort by finalScore descending
+  scored.sort((a, b) => b.finalScore - a.finalScore);
+
+  // Dedupe by base product
+  let deduped = dedupeScored(scored, cfg.maxPerBase);
+
+  // Diversity pass: limit same sub-type
+  deduped = diversityPass(deduped, cfg.maxSameSubType);
+
+  // Graceful fallback: if too few results after hard filtering,
+  // relax must_have constraints and re-run with preferences only
+  if (cfg.gracefulFallback && deduped.length < cfg.fallbackMinResults && hardFilteredProducts.length > 0) {
+    const relaxedConstraints = constraints.map(c =>
+      c.priority === "must_have" && c.fieldId !== "_budget" && c.fieldId !== "_age_restriction"
+        ? { ...c, priority: "preference" as ConstraintPriority }
+        : c
+    );
+
+    // Re-score the hard-filtered products with relaxed constraints
+    const rescored: ScoredProduct[] = [];
+    for (const { product } of hardFilteredProducts) {
+      const idx = embeddingRanked.findIndex(r => r.product === product);
+      const rawEmbed = idx >= 0 ? embeddingRanked[idx].score : 0;
+      const embedNorm = (rawEmbed - minEmbed) / embedRange;
+      const popScore = idx >= 0 ? 1 - (idx / totalCandidates) * 0.7 : 0.3;
+
+      const signals = extractProductSignals(product);
+      const result = matchProductConstraints(signals, relaxedConstraints);
+
+      if (result.hardFiltered) continue;
+
+      const finalScore = wEmbed * embedNorm + wConstraint * result.constraintScore * 0.7 + wPop * popScore;
+
+      rescored.push({
+        product,
+        embeddingScore: embedNorm,
+        constraintScore: result.constraintScore * 0.7, // penalize relaxed results
+        popularityScore: popScore,
+        finalScore,
+        constraintDetail: result,
+      });
+    }
+
+    rescored.sort((a, b) => b.finalScore - a.finalScore);
+    const fallbackResults = dedupeScored(rescored, cfg.maxPerBase);
+
+    // Merge: original results first, then fallback results
+    const existingIds = new Set(deduped.map(r => String((r.product as any).product_id || r.product.name)));
+    for (const fb of fallbackResults) {
+      const pid = String((fb.product as any).product_id || fb.product.name);
+      if (!existingIds.has(pid) && deduped.length < cfg.fallbackMinResults * 2) {
+        deduped.push(fb);
+        existingIds.add(pid);
+      }
+    }
+  }
+
+  // Build debug report
+  const debug = buildDebugReport(user, constraints, deduped, hardFilteredProducts, cfg);
+
+  return { results: deduped, constraints, debug };
+}
+
+/* ===================================================================
+ * 5) DEDUPE + DIVERSITY
+ * =================================================================== */
+
+function dedupeScored(scored: ScoredProduct[], maxPerBase: number): ScoredProduct[] {
+  const counts = new Map<string, number>();
+  const result: ScoredProduct[] = [];
+
+  for (const item of scored) {
+    const base = baseId(item.product);
+    const current = counts.get(base) || 0;
+    if (current < maxPerBase) {
+      counts.set(base, current + 1);
+      result.push(item);
+    }
+  }
+
+  return result;
+}
+
+function diversityPass(scored: ScoredProduct[], maxSameSubType: number): ScoredProduct[] {
+  if (maxSameSubType <= 0) return scored;
+
+  const typeCounts = new Map<string, number>();
+  const result: ScoredProduct[] = [];
+
+  for (const item of scored) {
+    const signals = extractProductSignals(item.product);
+    // Use category + productType as diversity key
+    const diversityKey = [signals.category, signals.productType].filter(Boolean).join("|") || "_uncategorized";
+    const current = typeCounts.get(diversityKey) || 0;
+
+    if (current < maxSameSubType) {
+      typeCounts.set(diversityKey, current + 1);
+      result.push(item);
+    }
+  }
+
+  return result;
+}
+
+/* ===================================================================
+ * 6) DEBUG / EXPLAINABILITY
+ * =================================================================== */
+
+export interface DebugReport {
+  timestamp: string;
+  userSummary: string;
+  constraintsSummary: string[];
+  totalCandidates: number;
+  hardFiltered: number;
+  afterConstraints: number;
+  afterDedupe: number;
+  topResults: {
+    name: string;
+    finalScore: number;
+    embed: number;
+    constraint: number;
+    pop: number;
+    details: string;
+  }[];
+  fallbackUsed: boolean;
+}
+
+function buildDebugReport(
+  user: UserContext,
+  constraints: Constraint[],
+  results: ScoredProduct[],
+  hardFilteredProducts: { product: Product; reason: string }[],
+  cfg: ConstraintEngineConfig,
+): DebugReport {
+  const userParts = [];
+  if (user.free_text) userParts.push(`free_text="${user.free_text}"`);
+  if (user.interests?.length) userParts.push(`interests=[${user.interests.join(", ")}]`);
+  if (user.gender) userParts.push(`gender=${user.gender}`);
+  if (user.budget_min) userParts.push(`budget_min=${user.budget_min}`);
+  if (user.budget_max) userParts.push(`budget_max=${user.budget_max}`);
+  if (user.age) userParts.push(`age=${user.age}`);
+
+  return {
+    timestamp: new Date().toISOString(),
+    userSummary: userParts.join(" | ") || "no user data",
+    constraintsSummary: constraints.map(c =>
+      `[${c.priority}] ${c.fieldId} (${c.constraintType}): ${JSON.stringify(c.value).slice(0, 80)}`
+    ),
+    totalCandidates: results.length + hardFilteredProducts.length,
+    hardFiltered: hardFilteredProducts.length,
+    afterConstraints: results.length + hardFilteredProducts.length - hardFilteredProducts.length,
+    afterDedupe: results.length,
+    topResults: results.slice(0, 15).map(r => ({
+      name: r.product.name,
+      finalScore: Number(r.finalScore.toFixed(3)),
+      embed: Number(r.embeddingScore.toFixed(3)),
+      constraint: Number(r.constraintScore.toFixed(3)),
+      pop: Number(r.popularityScore.toFixed(3)),
+      details: r.constraintDetail.matches
+        .map(m => `${m.fieldId}: ${m.matched ? "✓" : "✗"} (${m.score.toFixed(2)}) ${m.reason}`)
+        .join(" | "),
+    })),
+    fallbackUsed: hardFilteredProducts.length > 0 && results.length < cfg.fallbackMinResults,
+  };
+}
+
+/**
+ * Log the debug report to server console (when DEBUG_CONSTRAINTS env is set).
+ */
+export function logConstraintDebug(siteKey: string, debug: DebugReport): void {
+  if (!process.env.DEBUG_CONSTRAINTS && !process.env.DEBUG_ATTRIBUTES) return;
+
+  console.log(`\n${"=".repeat(70)}`);
+  console.log(`[universalConstraints:${siteKey}] ${debug.timestamp}`);
+  console.log(`User: ${debug.userSummary}`);
+  console.log(`Constraints (${debug.constraintsSummary.length}):`);
+  for (const c of debug.constraintsSummary) {
+    console.log(`  ${c}`);
+  }
+  console.log(`Pipeline: ${debug.totalCandidates} candidates → ${debug.hardFiltered} hard-filtered → ${debug.afterDedupe} after dedupe`);
+  if (debug.fallbackUsed) console.log(`⚠ FALLBACK USED: too few results after hard filter`);
+  console.log(`Top ${debug.topResults.length} results:`);
+  for (let i = 0; i < debug.topResults.length; i++) {
+    const r = debug.topResults[i];
+    console.log(
+      `  #${i + 1} "${r.name}" final=${r.finalScore} (embed=${r.embed} constraint=${r.constraint} pop=${r.pop})`
+    );
+    console.log(`       ${r.details}`);
+  }
+  console.log("=".repeat(70) + "\n");
+}

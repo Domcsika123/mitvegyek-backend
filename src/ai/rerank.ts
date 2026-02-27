@@ -2,6 +2,7 @@
 import OpenAI from "openai";
 import { UserContext } from "../models/UserContext";
 import { Product } from "../models/Product";
+import { baseId } from "./queryUtils";
 
 type RankedProduct = {
   product: Product;
@@ -126,12 +127,20 @@ function findOverlapToken(userTokens: string[], productTokens: Set<string>): str
   return null;
 }
 
+/** Shopify-stílusú hierarchikus kategóriát a legspecifikusabb (utolsó) szegmensre egyszerűsíti. */
+function simplifyCategory(cat: string): string {
+  if (!cat) return cat;
+  // "Apparel & Accessories > Clothing > Dresses" → "Dresses"
+  const segments = cat.split(">").map(s => s.trim()).filter(Boolean);
+  return segments[segments.length - 1] || cat;
+}
+
 function summarizeCatalog(products: Product[]): { cats: string[]; words: string[]; hint: string } {
   const catCount = new Map<string, number>();
   const wordCount = new Map<string, number>();
 
   for (const p of products) {
-    const cat = String(p.category || "").trim().toLowerCase();
+    const cat = simplifyCategory(String(p.category || "").trim().toLowerCase());
     if (cat) catCount.set(cat, (catCount.get(cat) || 0) + 1);
 
     const hay = `${p.name || ""} ${p.category || ""} ${p.description || ""}`;
@@ -154,6 +163,73 @@ function summarizeCatalog(products: Product[]): { cats: string[]; words: string[
   if (words.length) bits.push(`kulcsszavak: ${words.join(", ")}`);
 
   return { cats, words, hint: bits.length ? bits.join(" | ") : "nincs elég adat a katalógus jellegére" };
+}
+
+/* ===================== EXPLICIT SZŰRŐK FELISMERÉS ===================== */
+
+const COLOR_WORDS: Record<string, string> = {
+  "kék": "KÉK", "kek": "KÉK", "blue": "KÉK", "navy": "KÉK", "sötétkék": "KÉK",
+  "piros": "PIROS", "red": "PIROS", "vörös": "PIROS",
+  "sárga": "SÁRGA", "sarga": "SÁRGA", "yellow": "SÁRGA",
+  "zöld": "ZÖLD", "zold": "ZÖLD", "green": "ZÖLD",
+  "fekete": "FEKETE", "black": "FEKETE",
+  "fehér": "FEHÉR", "feher": "FEHÉR", "white": "FEHÉR",
+  "szürke": "SZÜRKE", "szurke": "SZÜRKE", "grey": "SZÜRKE", "gray": "SZÜRKE",
+  "barna": "BARNA", "brown": "BARNA",
+  "narancs": "NARANCS", "orange": "NARANCS",
+  "lila": "LILA", "purple": "LILA",
+  "rózsaszín": "RÓZSASZÍN", "rozsaszin": "RÓZSASZÍN", "pink": "RÓZSASZÍN",
+  "bordó": "BORDÓ", "bordo": "BORDÓ", "burgundy": "BORDÓ",
+  "bézs": "BÉZS", "bezs": "BÉZS", "beige": "BÉZS",
+  "türkiz": "TÜRKIZ", "turkiz": "TÜRKIZ",
+};
+
+const TYPE_WORDS: Record<string, string> = {
+  "zokni": "ZOKNI", "socks": "ZOKNI",
+  "pulcsi": "PULÓVER", "pulóver": "PULÓVER", "sweater": "PULÓVER",
+  "hoodie": "HOODIE", "kapucnis": "HOODIE",
+  "póló": "PÓLÓ", "tshirt": "PÓLÓ",
+  "nadrág": "NADRÁG", "nadrag": "NADRÁG", "pants": "NADRÁG",
+  "farmer": "FARMER", "jeans": "FARMER",
+  "cipő": "CIPŐ", "cipo": "CIPŐ", "sneaker": "CIPŐ",
+  "kabát": "KABÁT", "kabat": "KABÁT", "jacket": "KABÁT",
+  "szoknya": "SZOKNYA", "skirt": "SZOKNYA",
+  "ruha": "RUHA", "dress": "RUHA",
+  "ing": "ING", "shirt": "ING",
+  "táska": "TÁSKA", "taska": "TÁSKA", "bag": "TÁSKA",
+  "melegítő": "MELEGÍTŐ", "melegito": "MELEGÍTŐ",
+  "sapka": "SAPKA", "hat": "SAPKA",
+  "sál": "SÁL", "sal": "SÁL",
+};
+
+/**
+ * Felismeri a user szövegéből a kért szín(eke)t és típus(oka)t,
+ * és explicit utasítást generál az LLM-nek.
+ */
+function detectExplicitFilters(freeText: string, interests: string[]): string {
+  const combined = [freeText || "", ...(interests || [])].join(" ").toLowerCase();
+  const tokens = combined.split(/[\s\-–—_,;:!?.()[\]{}'"\/|]+/).filter(Boolean);
+
+  const foundColors = new Set<string>();
+  const foundTypes = new Set<string>();
+
+  for (const token of tokens) {
+    if (COLOR_WORDS[token]) foundColors.add(COLOR_WORDS[token]);
+    if (TYPE_WORDS[token]) foundTypes.add(TYPE_WORDS[token]);
+  }
+
+  const lines: string[] = [];
+  if (foundColors.size > 0) {
+    lines.push(`- SZÍN: ${[...foundColors].join(", ")} → items-be CSAK ezzel a színnel illenek! Ha a termék nevében/leírásában nincs szín-adat, becsüld meg a termék nevéből, hogy milyen színű lehet.`);
+  }
+  if (foundTypes.size > 0) {
+    lines.push(`- TÍPUS: ${[...foundTypes].join(", ")} → items-be CSAK ez a terméktípus kerüljön!`);
+  }
+  if (lines.length === 0) {
+    lines.push("(Nincs explicit szín/típus szűrő — válaszd a legrelevánsabb termékeket.)");
+  }
+
+  return lines.join("\n");
 }
 
 /**
@@ -179,7 +255,84 @@ function estimateMismatch(user: UserContext, products: Product[]): boolean {
   return true;
 }
 
-/* ===================== FALLBACK REASON (rövid, de "salesy") ===================== */
+/* ===================== FALLBACK REASON — tényszerű, termékleíró, VÁLTOZATOS ===================== */
+
+// 8 sablon a determinisztikus rotációhoz
+const REASON_TEMPLATES = [
+  (attrs: string[]) => attrs.length > 0 ? `${attrs.join(", ")}.` : "Népszerű termék.",
+  (attrs: string[]) => attrs.length > 0 ? `Ajánljuk: ${attrs.join(", ")}.` : "Kedvelt darab.",
+  (attrs: string[]) => attrs.length > 0 ? `${attrs[0]}${attrs.length > 1 ? ` – ${attrs.slice(1).join(", ")}` : ""}.` : "Kiváló választás.",
+  (attrs: string[]) => attrs.length > 0 ? `Jellemzői: ${attrs.join(", ")}.` : "Megbízható minőség.",
+  (attrs: string[]) => attrs.length > 0 ? `Ez a termék: ${attrs.join(", ")}.` : "Praktikus darab.",
+  (attrs: string[]) => attrs.length > 1 ? `${attrs[0]}, ${attrs.slice(1).join(" és ")}.` : (attrs[0] || "Hasznos termék."),
+  (attrs: string[]) => attrs.length > 0 ? `Tulajdonságok: ${attrs.join(", ")}.` : "Sokoldalú választás.",
+  (attrs: string[]) => attrs.length > 0 ? `${attrs.join(" | ")}.` : "Elérhető termék.",
+];
+
+// Hash product_id to get deterministic template index
+function hashProductId(productId: string): number {
+  let hash = 0;
+  const str = String(productId || "");
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash);
+}
+
+// Extract color from product
+function extractColor(product: Product): string | null {
+  const text = `${product.name || ""} ${(product as any).description || ""}`.toLowerCase();
+  const colorMap: Record<string, string> = {
+    "fekete": "fekete", "black": "fekete",
+    "fehér": "fehér", "feher": "fehér", "white": "fehér",
+    "kék": "kék", "kek": "kék", "blue": "kék", "navy": "sötétkék",
+    "piros": "piros", "red": "piros",
+    "zöld": "zöld", "zold": "zöld", "green": "zöld",
+    "sárga": "sárga", "sarga": "sárga", "yellow": "sárga",
+    "szürke": "szürke", "szurke": "szürke", "grey": "szürke", "gray": "szürke",
+    "barna": "barna", "brown": "barna",
+    "rózsaszín": "rózsaszín", "rozsaszin": "rózsaszín", "pink": "rózsaszín",
+    "lila": "lila", "purple": "lila",
+    "narancs": "narancs", "orange": "narancs",
+  };
+  for (const [key, hun] of Object.entries(colorMap)) {
+    if (new RegExp(`\\b${key}\\b`, "i").test(text)) {
+      return hun;
+    }
+  }
+  return null;
+}
+
+// Extract material from description
+function extractMaterial(desc: string): string | null {
+  if (!desc) return null;
+  const matchers = [
+    /(\d+\s*GSM)/i,
+    /(organic\s+cotton|100%\s+pamut|100%\s+cotton)/i,
+    /(pamut|polyester|bőr|leather|denim|fleece|gyapjú|wool|selyem|silk)/i,
+  ];
+  for (const re of matchers) {
+    const m = desc.match(re);
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
+// Extract type/style from product
+function extractType(product: Product): string | null {
+  const cat = String(product.category || "");
+  const type = (product as any).product_type || "";
+  
+  // Shopify breadcrumb → last segment
+  if (cat.includes(">")) {
+    return cat.split(">").pop()!.trim();
+  }
+  if (type && type.length < 30) return type;
+  if (cat && cat.length < 30) return cat;
+  return null;
+}
 
 function buildFallbackReason(
   user: UserContext,
@@ -187,51 +340,56 @@ function buildFallbackReason(
   mismatch: boolean,
   catalogHintShort: string
 ): string {
-  const userTokens = getUserTokens(user);
-  const pt = getProductTokens(product);
-  const overlap = findOverlapToken(userTokens, pt);
-
-  const price = product.price;
-  const hasMax = typeof user.budget_max === "number" && isFinite(user.budget_max as number);
-  const inBudget =
-    typeof price === "number" &&
-    isFinite(price) &&
-    hasMax &&
-    typeof user.budget_max === "number" &&
-    price <= (user.budget_max as number);
-
-  const cat = String(product.category || "").trim();
-
-  if (overlap) {
-    return `Kapcsolódik ehhez: „${overlap}” — ezért jó kiinduló választás.${inBudget ? " Árban is belefér a keretbe." : ""}`;
-  }
-
-  if (mismatch && userTokens.length > 0) {
-    return `Nem a klasszikus „${userTokens[0]}” vonal a bolt kínálata (inkább: ${catalogHintShort}), de ez egy biztonságos, könnyen szerethető választás${cat ? ` a(z) „${cat}” kategóriából` : ""}.`;
-  }
-
-  return `Praktikus, ajándék-kompatibilis választás${cat ? ` (kategória: ${cat})` : ""}.${inBudget ? " Árban is belefér a keretbe." : ""}`;
+  const productId = (product as any).product_id || product.name || "";
+  const templateIdx = hashProductId(productId) % REASON_TEMPLATES.length;
+  
+  const desc = String((product as any).description || "").trim();
+  
+  // Collect attributes
+  const attrs: string[] = [];
+  
+  // Color
+  const color = extractColor(product);
+  if (color) attrs.push(color);
+  
+  // Type/category
+  const type = extractType(product);
+  if (type && type.length < 40) attrs.push(type);
+  
+  // Material
+  const material = extractMaterial(desc);
+  if (material) attrs.push(material);
+  
+  // Fit/style
+  const fitMatch = desc.match(/(oversized|slim|relaxed|boxy|regular)\s*(fit|szabás)?/i);
+  if (fitMatch) attrs.push(fitMatch[0].trim());
+  
+  // Dedupe attrs
+  const uniqueAttrs = [...new Set(attrs)].slice(0, 3);
+  
+  // Apply template
+  const template = REASON_TEMPLATES[templateIdx];
+  return template(uniqueAttrs);
 }
+
 
 /* ===================== DEDUPE ===================== */
 
 function productKey(p: Product): string {
-  const id = String((p as any).product_id || "").trim();
-  if (id) return `id:${id}`;
-  const url = String((p as any).product_url || "").trim();
-  if (url) return `url:${url}`;
-  const name = String(p.name || "").trim().toLowerCase();
-  const price = String((p as any).price ?? "");
-  return `np:${name}|${price}`;
+  return baseId(p);
 }
 
 function uniqueByProduct(items: RankedProduct[]): RankedProduct[] {
   const seen = new Set<string>();
+  const seenNames = new Set<string>();
   const out: RankedProduct[] = [];
   for (const it of items) {
     const k = productKey(it.product);
+    const name = String(it.product.name || "").trim().toLowerCase();
     if (seen.has(k)) continue;
+    if (name && seenNames.has(name)) continue;
     seen.add(k);
+    if (name) seenNames.add(name);
     out.push(it);
   }
   return out;
@@ -265,62 +423,93 @@ export async function rerankWithLLM(user: UserContext, products: Product[]): Pro
     free_text: cut(user.free_text || "", 600),
   };
 
-  const productList = products.map((p, idx) => ({
-    index: idx,
-    product_id: (p as any).product_id,
-    name: p.name,
-    price: (p as any).price,
-    category: (p as any).category,
-    description: cut((p as any).description, 320),
-  }));
+  const productList = products.map((p, idx) => {
+    const parts: string[] = [];
+    if ((p as any).description) parts.push(cut((p as any).description, 200));
+    if ((p as any).tags) parts.push(`[${cut((p as any).tags, 120)}]`);
+    if ((p as any).product_type) parts.push(`(${(p as any).product_type})`);
+    if ((p as any).vendor) parts.push(`by ${(p as any).vendor}`);
 
-  const maxTotal = Math.min(18, products.length);
-  const maxMain = Math.min(12, products.length);
-  const maxAlso = Math.min(12, products.length);
+    return {
+      index: idx,
+      product_id: (p as any).product_id,
+      name: p.name,
+      price: (p as any).price,
+      category: (p as any).category,
+      info: parts.join(" ") || "",
+    };
+  });
 
-  const minMainTarget = Math.min(6, maxMain); // ✅ legalabb 6 tallatat
-  const minAlsoTarget = Math.min(8, maxAlso); // ✅ legyen rendes AMI MÉG ÉRDEKELHET
+  // ✅ JAVÍTOTT: több item visszaadása (12-20)
+  const maxTotal = Math.min(30, products.length);
+  const maxMain = Math.min(15, products.length);
+  const maxAlso = Math.min(15, products.length);
+
+  const minMainTarget = Math.min(8, maxMain);
+  const minAlsoTarget = Math.min(12, maxAlso);
 
   const systemPrompt = `
-Te egy magyar nyelvű TERMÉK-AJÁNLÓ asszisztens vagy.
+Te egy magyar nyelvű termékajánló rendszer vagy. Egy webshop ajánló widgetjéhez rendezed a termékeket.
 
-CÉL:
-- Két listát adj vissza:
-  1) items = "legjobb találatok" (nem kell 100% szó szerinti egyezés; lehet „legközelebbi” találat is)
-  2) also_items = "AMI MÉG ÉRDEKELHET" (általánosabb, de vállalható termékek ebből a webshopból)
+FELADATOD:
+Két rendezett listát adj vissza JSON-ban:
+1) "items" — A felhasználó kéréséhez LEGJOBBAN illő termékek
+2) "also_items" — Kiegészítő ajánlatok, amik még relevánsak lehetnek
 
-FONTOS:
-- NE írj olyat, hogy „nincs ilyen témájú termék” mint végkövetkeztetés.
-  Inkább: „Direkt egyezés most nem egyértelmű, ezért hoztam pár ajándék-kompatibilis alternatívát a bolt kínálatából.”
+RANGSOROLÁSI ELVEK (fontossági sorrendben):
+1. RELEVANCIA: A felhasználó szavainak pontos megértése. Csak az számít, amit a user TÉNYLEGESEN írt/kért.
+2. TERMÉKTÍPUS EGYEZÉS: Ha konkrét típust kér (pl. nadrág, cipő), items-ben KIZÁRÓLAG az adott típus.
+3. SZÍN EGYEZÉS: Ha konkrét színt kér, items-ben CSAK az adott színű termékek.
+4. ÁRTARTOMÁNY: A budget_min–budget_max közötti termékeket preferáld.
+5. VÁLTOZATOSSÁG: Ne adj 5 nagyon hasonló terméket.
 
-SZABÁLYOK:
-- Csak JSON-t adj vissza, extra szöveg nélkül.
-- Az "index" a kapott terméklista indexe.
-- items legyen 6-12 elem, ha van elég termék.
-- also_items legyen 8-12 elem, ha van elég termék.
-- Ne duplikálj: ugyanaz az index ne szerepeljen mindkét listában.
-- Az indoklás 1-2 mondat, magyarul, barátságos és értékesítő.
-- Csak olyat állíts, ami tényleg látszik a termék adataiból (name/category/description/price). Ne hallucinálj.
+INDOKLÁS SZABÁLYOK (KRITIKUS):
+- Minden "reason" legyen MAX 1-2 MONDAT, MAX 180 KARAKTER!
+- TÉNYSZERŰ, a TERMÉK valódi tulajdonságairól szóljon
+- NE találj ki tulajdonságokat! Csak a termék nevéből, leírásából, kategóriájából, tagjeiből vett tényeket írd.
+- NE hivatkozz a user kérésére (ne írd: "a keresésedhez illik", "remek választás")
+- NE ismételd ugyanazt a reason-t több terméknél! Mindegyik legyen egyedi.
+  
+Példák:
+✓ "Kapucnis pulóver, 450GSM organikus pamut."
+✓ "Kék tank top, laza szabás, organikus pamut."
+✓ "Oversized crewneck, sötét szín."
+✗ "Remek választás!" — üres
+✗ "A keresésedhez illik" — tiltott
 
-KÖTELEZŐ VÁLASZFORMÁTUM:
+NOTICE SZABÁLY:
+- A "notice" mező legyen null. A notice-ot a rendszer generálja, NEM te.
+
+VÁLASZFORMÁTUM (kizárólag JSON):
 {
-  "notice": "opcionális, rövid és pozitív hangnem",
-  "items": [ { "index": 0, "reason": "..." } ],
-  "also_items": [ { "index": 1, "reason": "..." } ]
+  "notice": null,
+  "items": [ { "index": 0, "reason": "Max 180 karakter, tényszerű" } ],
+  "also_items": [ { "index": 1, "reason": "Max 180 karakter, tényszerű" } ]
 }
+
+KORLÁTOK:
+- items: 1-${maxMain} db
+- also_items: 4-${maxAlso} db
+- Egy index NE legyen mindkét listában
+- CSAK a kapott adatokból (name/category/description/price/tags) indokolj!
 `.trim();
 
   const userPrompt = `
-Felhasználói adatok:
-${JSON.stringify(userForLLM, null, 2)}
+FELHASZNÁLÓ:
+- Szabad szöveg: "${userForLLM.free_text || "(nincs)"}"
+- Érdeklődés: ${userForLLM.interests.length > 0 ? userForLLM.interests.join(", ") : "(nincs)"}
+- Kapcsolat (kinek): ${userForLLM.relationship || "(nincs megadva)"}
+- Nem: ${userForLLM.gender || "ismeretlen"}
+- Kor: ${userForLLM.age ?? "ismeretlen"}
+- Budget: ${userForLLM.budget_min ?? "?"} – ${userForLLM.budget_max ?? "?"} Ft
 
-Katalógus jelleg (heurisztika):
-${catalog.hint}
+⚠️ EXPLICIT SZŰRŐK (az items listában KÖTELEZŐ betartani):
+${detectExplicitFilters(userForLLM.free_text, userForLLM.interests)}
 
-Megjegyzés:
-${mismatch ? "A direkt kulcsszó-egyezés bizonytalan. Ettől még válassz „legközelebbi” találatokat items-be, és írj kedves, őszinte notice-t." : "Valószínű van átfedés; adj releváns találatokat items-be."}
+BOLT JELLEMZÉSE: ${catalog.hint}
+${mismatch ? "⚠ A keresés és a bolt kínálata nem fedi egymást teljesen. Válaszd a legközelebbi releváns termékeket." : ""}
 
-Terméklista:
+TERMÉKLISTA (${productList.length} db):
 ${JSON.stringify(productList, null, 2)}
 `.trim();
 
@@ -400,14 +589,12 @@ ${JSON.stringify(productList, null, 2)}
       items = fillFromRemaining(items, used, minMainTarget, mismatch).slice(0, maxMain);
       also_items = fillFromRemaining(also_items, used, minAlsoTarget, mismatch).slice(0, maxAlso);
 
-      // notice: legyen rövid, pozitív, és ne „nincs ilyen termék”
-      let notice = typeof parsed?.notice === "string" ? parsed.notice.trim() : "";
-      if (!notice) {
-        notice = mismatch
-          ? `Direkt egyezés most nem volt egyértelmű, ezért a bolt stílusához illő, ajándék-kompatibilis ötleteket válogattam (${catalogHintShort}).`
-          : "";
+      // notice: csak ha TÉNYLEG nincs releváns találat (mismatch=true ÉS items üres)
+      // Ha vannak items, ne zavarjuk üzenettel — a recommend.ts úgyis felülírja ha kell
+      let notice = "";
+      if (mismatch && items.length === 0) {
+        notice = `A bolt kínálatából válogattam neked néhány ajánlatot.`;
       }
-      if (notice && notice.length > 220) notice = notice.slice(0, 220).trim() + "…";
 
       // total limit (items elsőbbség)
       const total = [...items, ...also_items].slice(0, maxTotal);
@@ -457,8 +644,8 @@ ${JSON.stringify(productList, null, 2)}
       }
 
       const notice = mismatch
-        ? `Direkt egyezés most nem volt egyértelmű, ezért a bolt kínálatából hoztam pár biztos befutó alternatívát (${catalogHintShort}).`
-        : "Most nem sikerült pontosan rangsorolni, de hoztam pár vállalható alternatívát.";
+        ? `A bolt kínálatából válogattam neked néhány ajánlatot.`
+        : "";
 
       return { items, also_items: also, notice };
     }
