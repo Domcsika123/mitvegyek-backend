@@ -21,6 +21,39 @@ function ensureDataDir() {
   }
 }
 
+// ✅ Katalógus darabszám cache – elkerüli a ~96MB JSON fájlok teljes beolvasását
+// a getCatalogSummaries() hívásakor. A "catalog-counts.json" nem illeszkedik a
+// "products*.json" szűrőre, tehát nem keveredik a termékfájlokkal.
+const CATALOG_COUNTS_FILE = path.join(DATA_DIR, "catalog-counts.json");
+
+function readCatalogCounts(): Record<string, number> {
+  try {
+    if (fs.existsSync(CATALOG_COUNTS_FILE)) {
+      return JSON.parse(fs.readFileSync(CATALOG_COUNTS_FILE, "utf8"));
+    }
+  } catch (_) {}
+  return {};
+}
+
+function writeCatalogCount(siteKey: string, count: number) {
+  try {
+    ensureDataDir();
+    const counts = readCatalogCounts();
+    counts[siteKey] = count;
+    fs.writeFileSync(CATALOG_COUNTS_FILE, JSON.stringify(counts, null, 2), "utf8");
+  } catch (_) {}
+}
+
+function removeCatalogCount(siteKey: string) {
+  try {
+    if (fs.existsSync(CATALOG_COUNTS_FILE)) {
+      const counts = readCatalogCounts();
+      delete counts[siteKey];
+      fs.writeFileSync(CATALOG_COUNTS_FILE, JSON.stringify(counts, null, 2), "utf8");
+    }
+  } catch (_) {}
+}
+
 /**
  * Egy adott site_key katalógusának betöltése fájlrendszerből.
  * - default → products.json
@@ -80,6 +113,8 @@ function loadCatalogFromDisk(siteKey: string): Product[] {
     const productsWithoutEmb = products.map(({ embedding, ...rest }: any) => rest as Product);
 
     console.log(`Betöltött termékek száma [${siteKey}]: ${productsWithoutEmb.length}`);
+    // Sidecar count fájl írása, hogy getCatalogSummaries() ne olvassa be a teljes JSON-t
+    writeCatalogCount(siteKey, productsWithoutEmb.length);
     return productsWithoutEmb;
   } catch (err) {
     console.error(
@@ -142,6 +177,7 @@ export function replaceCatalog(
   try {
     fs.writeFileSync(filePath, JSON.stringify(products, null, 2), "utf8");
     console.log(`Katalógus fájlba írva [${key}]: ${filePath}`);
+    writeCatalogCount(key, productsWithoutEmb.length);
   } catch (err) {
     console.error(
       `Nem sikerült fájlba írni a katalógust [${key}] – ${filePath}`,
@@ -152,13 +188,14 @@ export function replaceCatalog(
 
 /**
  * Katalógus összefoglalók az admin HTML-nek.
- * Itt KÖZVETLENÜL a data/ mappában lévő JSON fájlokat nézzük,
- * függetlenül attól, hogy mi van a memóriában.
+ * ✅ Memória-optimalizált: NEM olvassa be a teljes termékfájlt a számláláshoz.
+ * Prioritás: 1. in-memory katalógus → 2. catalog-counts.json sidecar → 3. teljes JSON parse (csak egyszer, legacy)
  */
 export function getCatalogSummaries(): { site_key: string; count: number }[] {
   ensureDataDir();
 
-  let summaries: { site_key: string; count: number }[] = [];
+  const summaries: { site_key: string; count: number }[] = [];
+  const precomputedCounts = readCatalogCounts();
 
   try {
     const files = fs.readdirSync(DATA_DIR);
@@ -173,11 +210,27 @@ export function getCatalogSummaries(): { site_key: string; count: number }[] {
         siteKey = fileName.slice("products-".length, -".json".length);
       }
 
+      // 1. In-memory katalógus – legjobb eset, nincs I/O
+      if (catalogs[siteKey] !== undefined) {
+        summaries.push({ site_key: siteKey, count: catalogs[siteKey].length });
+        return;
+      }
+
+      // 2. Sidecar count fájlból – kis JSON, gyors
+      if (precomputedCounts[siteKey] !== undefined) {
+        summaries.push({ site_key: siteKey, count: precomputedCounts[siteKey] });
+        return;
+      }
+
+      // 3. Fallback: teljes JSON parse (csak egyszer, legacy adatoknál)
+      // Menti a sidecar-t, hogy legközelebb ne kelljen újra.
       const filePath = path.join(DATA_DIR, fileName);
       try {
+        console.log(`[productService] Első count [${siteKey}] – teljes fájl olvasás (csak egyszer)`);
         const raw = fs.readFileSync(filePath, "utf8");
         const data = JSON.parse(raw);
         const count = Array.isArray(data) ? data.length : 0;
+        writeCatalogCount(siteKey, count);
         summaries.push({ site_key: siteKey, count });
       } catch (err) {
         console.error(
@@ -239,6 +292,7 @@ export function deleteCatalog(siteKey: string) {
       fs.unlinkSync(filePath);
       console.log(`Katalógus fájl törölve [${key}]: ${filePath}`);
     }
+    removeCatalogCount(key);
   } catch (err) {
     console.error(
       `Nem sikerült törölni a katalógus fájlt [${key}] – ${filePath}`,
