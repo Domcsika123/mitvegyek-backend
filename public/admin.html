@@ -751,6 +751,11 @@
       localStorage.removeItem("mv_admin_token");
       window.location.href = "/admin-login.html";
     }
+
+    // Keep-alive: minden 8 percben pingeli a szervert, hogy ne aludjon el (Render free tier)
+    setInterval(async () => {
+      try { await fetch("/health"); } catch (_) {}
+    }, 8 * 60 * 1000);
   </script>
 </head>
 
@@ -1643,10 +1648,16 @@
                 const errData = JSON.parse(rawText);
                 errMsg = errData.error || `HTTP ${status}`;
               } catch {
-                if (rawText) {
+                if (status === 502 || status === 503) {
+                  errMsg = "A szerver éppen indul (Render spin-up). Várj ~30 másodpercet és próbáld újra.";
+                } else if (status === 504) {
+                  errMsg = "Szerver timeout – az import túl sokáig tartott. Próbálj kisebb CSV-vel.";
+                } else if (status === 401) {
+                  errMsg = "Munkamenet lejárt – jelentkezz be újra.";
+                } else if (rawText) {
                   errMsg = `HTTP ${status}: ${rawText.replace(/<[^>]+>/g, "").trim().slice(0, 200)}`;
                 } else {
-                  errMsg = `HTTP ${status}: szerver nem válaszolt JSON-nal`;
+                  errMsg = `HTTP ${status}: szerver nem válaszolt`;
                 }
               }
               throw new Error(errMsg);
