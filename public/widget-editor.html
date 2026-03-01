@@ -116,6 +116,42 @@
     .vis-rules { display:flex; flex-direction:column; gap:4px; margin-top:4px; }
     .vis-rule { display:flex; gap:6px; align-items:center; }
     .vis-rule select, .vis-rule input { font-size:12px; padding:4px 6px; border-radius:6px; border:1px solid #d1d5db; }
+
+    /* MOBILE */
+    @media (max-width: 640px) {
+      body { padding: 10px; }
+      h1 { font-size: 18px; }
+
+      /* Topbar: stack title & back button vertically */
+      .mv-topbar { flex-direction: column; align-items: flex-start; gap: 6px; }
+
+      /* Cards: less padding on small screens */
+      .mv-card { padding: 12px; }
+
+      /* Field list header row ("Form mezők" + "+ Új mező" btn) */
+      #tab-fields .mv-card > div:first-child { flex-wrap: wrap !important; gap: 6px !important; }
+
+      /* Tabs: smaller text & padding */
+      .mv-tab { padding: 6px 10px; font-size: 12px; }
+
+      /* Preset buttons: compact */
+      .preset-bar .mv-btn { font-size: 12px; padding: 5px 10px; }
+
+      /* Color rows: stack label above controls */
+      .color-row { flex-wrap: wrap; gap: 6px; }
+      .color-meta { flex: 1 1 100%; min-width: 0; }
+      .color-hex { width: 80px; }
+
+      /* Mapping grid in modal: single column */
+      .mapping-grid { grid-template-columns: 1fr; }
+
+      /* Preview heights: shorter on mobile */
+      .previewWrap--bubble { height: 200px; }
+      .previewWrap--panel { height: 400px; }
+
+      /* Modal: tighter padding */
+      .modal-box { padding: 16px; }
+    }
   </style>
 
   <script>
