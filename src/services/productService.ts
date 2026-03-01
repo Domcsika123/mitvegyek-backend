@@ -3,6 +3,7 @@
 import fs from "fs";
 import path from "path";
 import { Product } from "../models/Product";
+import { cacheEmbeddings } from "../ai/embeddingIndex";
 
 type CatalogMap = Record<string, Product[]>;
 
@@ -73,8 +74,13 @@ function loadCatalogFromDisk(siteKey: string): Product[] {
       embedding: Array.isArray(p.embedding) ? p.embedding : undefined,
     }));
 
-    console.log(`Betöltött termékek száma [${siteKey}]: ${products.length}`);
-    return products;
+    // ✅ Embeddingeket külön cache-be tesszük, majd kivonjuk a termék objektumokból.
+    // Ez ~80MB memóriát spórol nagy katalógusoknál (pl. 1649 termék × 3072 float).
+    cacheEmbeddings(siteKey, products);
+    const productsWithoutEmb = products.map(({ embedding, ...rest }: any) => rest as Product);
+
+    console.log(`Betöltött termékek száma [${siteKey}]: ${productsWithoutEmb.length}`);
+    return productsWithoutEmb;
   } catch (err) {
     console.error(
       `Hiba történt a termékfájl betöltése közben [${siteKey}]:`,
@@ -117,7 +123,11 @@ export function replaceCatalog(
   persistToDisk = true
 ) {
   const key = siteKey || "default";
-  catalogs[key] = products;
+
+  // ✅ Embeddingeket külön cache-be, a catalogs Map-ben csak metaadat
+  cacheEmbeddings(key, products);
+  const productsWithoutEmb = products.map(({ embedding, ...rest }: any) => rest as Product);
+  catalogs[key] = productsWithoutEmb;
 
   console.log(
     `Katalógus frissítve [${key}], termékek száma: ${products.length}`

@@ -10,6 +10,7 @@ import {
 } from "../services/partnerService";
 import { getPublicWidgetConfig } from "../services/widgetConfigService";
 import { hybridSearch } from "../search/hybridSearch";
+import { enrichWithCachedEmbeddings } from "../ai/embeddingIndex";
 import { parsePrice } from "../ai/price";
 import { rerankWithLLM } from "../ai/rerank";
 import { buildCardDescription } from "../reco/buildCardDescription";
@@ -626,7 +627,9 @@ router.post("/recommend", async (req, res) => {
 
     if (queryText.trim()) {
       try {
-        const hybridResults = await hybridSearch(queryText, allProducts, {
+        // Embeddingeket visszarakjuk a termékekre a kereséshez (katalógusban már nincs bennük)
+        const productsForSearch = enrichWithCachedEmbeddings(siteKey || "default", allProducts);
+        const hybridResults = await hybridSearch(queryText, productsForSearch, {
           topK: 400,
           minResults: 30,
           maxResults: 150,
