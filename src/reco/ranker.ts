@@ -359,8 +359,8 @@ function normalizeText(value: unknown): string {
     .trim()
     .toLowerCase()
     .normalize("NFD")
-    .replaceAll(/[\u0300-\u036f]/g, "")
-    .replaceAll(/\s+/g, " ")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -936,7 +936,7 @@ export function rankProducts(
  * Truncates human-readable text intelligently.
  */
 function truncateHumanText(input: string, maxLen: number): string {
-  const clean = normalizeText(input).replaceAll(/\s+/g, " ").trim();
+  const clean = normalizeText(input).replace(/\s+/g, " ").trim();
   if (!clean) return "";
   if (clean.length <= maxLen) return clean;
   const cut = clean.slice(0, maxLen - 1);

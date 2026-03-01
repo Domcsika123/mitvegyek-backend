@@ -58,6 +58,7 @@ function loadCatalogFromDisk(siteKey: string): Product[] {
       product_id: p.product_id ?? `p_${siteKey}_${idx}`,
       name: p.name ?? "Ismeretlen termék",
       price: Number(p.price) || 0,
+      price_currency: p.price_currency ?? undefined,
       category: p.category ?? "",
       description: p.description ?? "",
       image_url: p.image_url ?? "",

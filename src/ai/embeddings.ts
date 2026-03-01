@@ -25,56 +25,128 @@ function clampText(s: string, maxLen = 600): string {
   return t.slice(0, maxLen) + "…";
 }
 
+// ✅ Hungarian → English translation map for cross-lingual embedding
+const HU_TO_EN_PRODUCT: Record<string, string> = {
+  // Ruhatípusok / Clothing types
+  "póló": "t-shirt tee",
+  "pulóver": "sweater crewneck",
+  "pulcsi": "sweater crewneck",
+  "hoodie": "hoodie",
+  "kapucnis": "hoodie",
+  "melegítő": "sweatshirt",
+  "nadrág": "pants trousers",
+  "rövidnadrág": "shorts",
+  "farmer": "jeans denim",
+  "ing": "shirt",
+  "kabát": "jacket coat",
+  "dzseki": "jacket",
+  "cipő": "shoes sneakers",
+  "táska": "bag",
+  "sapka": "cap hat beanie",
+  "szoknya": "skirt",
+  "ruha": "dress",
+  "tank top": "tank top",
+  "trikó": "tank top",
+  "zokni": "socks",
+  // Színek / Colors
+  "fekete": "black",
+  "fehér": "white",
+  "kék": "blue",
+  "piros": "red",
+  "zöld": "green",
+  "sárga": "yellow",
+  "szürke": "grey gray",
+  "barna": "brown",
+  "lila": "purple",
+  "rózsaszín": "pink",
+  "narancs": "orange",
+  "bordó": "burgundy",
+  "bézs": "beige",
+  "türkiz": "turquoise teal",
+  "krém": "cream",
+  "sötétkék": "navy dark blue",
+  // Anyagok / Materials
+  "pamut": "cotton",
+  "organikus": "organic",
+  "poliészter": "polyester",
+  "bőr": "leather",
+  "gyapjú": "wool",
+  "selyem": "silk",
+  // Stílusok / Styles
+  "streetwear": "streetwear urban",
+  "sport": "sport athletic",
+  "alkalmi": "casual",
+  "elegáns": "elegant formal",
+  "oversized": "oversized",
+  "slim": "slim fit",
+  "relaxed": "relaxed loose",
+};
+
+function addEnglishTranslations(text: string): string {
+  if (!text) return text;
+  const lower = text.toLowerCase();
+  const additions: string[] = [];
+  for (const [hu, en] of Object.entries(HU_TO_EN_PRODUCT)) {
+    if (lower.includes(hu)) {
+      additions.push(en);
+    }
+  }
+  if (additions.length === 0) return text;
+  return `${text}. ${additions.join(" ")}`;
+}
+
 function buildUserProfileText(user: UserContext): string {
   const parts: string[] = [];
 
-  // Szabad szöveges kérés elsőbbséget kap — a legrelevánsabb információ
+  // Szabad szöveges kérés elsőbbséget kap — duplikálva HU + EN fordítással
   if (user.free_text) {
-    parts.push(normalizeHuQuery(user.free_text));
+    const normalized = normalizeHuQuery(user.free_text);
+    parts.push(normalized);
+    // Add English translation for cross-lingual embedding match
+    parts.push(addEnglishTranslations(normalized));
   }
 
-  // Érdeklődési körök: normalizálva és súlyozottan
+  // Érdeklődési körök
   if (user.interests && user.interests.length > 0) {
-    const normalizedInterests = user.interests.map((i) => normalizeHuQuery(i));
-    parts.push(`érdeklődés: ${normalizedInterests.join(", ")}`);
+    const normalized = user.interests.map((i) => normalizeHuQuery(i));
+    parts.push(normalized.join(", "));
+    // Add English translations
+    for (const interest of normalized) {
+      const withEn = addEnglishTranslations(interest);
+      if (withEn !== interest) parts.push(withEn);
+    }
   }
 
-  // Kapcsolat kontextus — ajándék-célzott kereséshez kritikus
+  // Kapcsolat kontextus
   if (user.relationship) {
     const relMap: Record<string, string> = {
-      partner: "romantikus partner, szerelmes ajándék",
-      barát: "barátnak szóló ajándék, baráti gesztus",
-      szülő: "szülőnek szóló ajándék, családi",
-      testvér: "testvérnek szóló ajándék",
-      kolléga: "munkatársnak szóló ajándék, professzionális",
-      gyerek: "gyereknek szóló ajándék, játékos",
-      nagyszülő: "nagyszülőnek szóló ajándék, praktikus",
+      partner: "romantikus partner, szerelmes ajándék. romantic partner gift",
+      barát: "barátnak szóló ajándék. gift for friend",
+      szülő: "szülőnek szóló ajándék. gift for parent",
+      testvér: "testvérnek szóló ajándék. gift for sibling",
+      kolléga: "munkatársnak szóló ajándék. gift for colleague",
+      gyerek: "gyereknek szóló ajándék. gift for child",
+      nagyszülő: "nagyszülőnek szóló ajándék. gift for grandparent",
     };
     const enriched = relMap[user.relationship.toLowerCase()] || user.relationship;
     parts.push(`ajándék: ${enriched}`);
   }
 
-  // Demográfia: kor és nem finomítja a szemantikus keresést
+  // Demográfia
   if (user.age) {
-    if (user.age < 18) parts.push("fiatal, tinédzser");
-    else if (user.age < 30) parts.push("fiatal felnőtt");
-    else if (user.age < 50) parts.push("középkorú felnőtt");
-    else parts.push("idősebb korosztály");
+    if (user.age < 18) parts.push("fiatal, tinédzser. young teen");
+    else if (user.age < 30) parts.push("fiatal felnőtt. young adult");
+    else if (user.age < 50) parts.push("középkorú felnőtt. adult");
+    else parts.push("idősebb korosztály. senior");
   }
   if (user.gender && user.gender !== "unknown") {
-    parts.push(`nem: ${user.gender === "male" ? "férfi" : user.gender === "female" ? "női" : user.gender}`);
+    const genderText = user.gender === "male" ? "férfi. men menswear"
+      : user.gender === "female" ? "női. women womenswear"
+      : user.gender;
+    parts.push(`nem: ${genderText}`);
   }
 
-  // Budget kontextus — segíti az árszegmens megtalálását
-  if (user.budget_max && user.budget_max < 5000) {
-    parts.push("olcsó, alacsony árkategória");
-  } else if (user.budget_max && user.budget_max < 15000) {
-    parts.push("közepes árkategória");
-  } else if (user.budget_min && user.budget_min > 20000) {
-    parts.push("prémium, magas árkategória");
-  }
-
-  return clampText(parts.join(". "), 1000);
+  return clampText(parts.join(". "), 1200);
 }
 
 function buildProductProfileText(product: Product): string {

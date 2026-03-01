@@ -213,9 +213,13 @@ export function baseId(product: Product): string {
     return sizeStripped;
   }
 
-  // 1c. Random hex-like ID (e.g. "637fae2992d63") — fall through to name-based grouping
+  // 1c. Random hex-like ID (e.g. "637fae2992d63") — group by name stripped of size suffix
   if (/^[0-9a-f]{8,}$/i.test(pid)) {
-    const name = String(product.name || "").trim().toLowerCase();
+    let name = String(product.name || "").trim().toLowerCase();
+    // Strip trailing size in parentheses, handles nested: "(XS (XXS Fit))", "(M)", "(EU 42)"
+    name = name.replace(/\s*\((?:[^()]*|\([^()]*\))*\)\s*$/, "").trim();
+    // Strip trailing size after separator: "- M", "/ L", etc.
+    name = name.replace(/\s*[-–\/|]\s*(xxs|xs|s|m|l|xl|xxl|xxxl|2xl|3xl|4xl|\d{2,3})\s*$/i, "").trim();
     if (name) return `name:${name}`;
   }
 
@@ -278,11 +282,16 @@ export function dedupeByBaseProduct<T extends Product>(
     }
   }
 
-  // Second pass: dedupe by exact product name (catches cases where baseId differs but name is identical)
+  // Second pass: dedupe by STRIPPED name (catches cross-format duplicates where baseId differs
+  // but product is the same — e.g. "__xs-xxs-fit" variant vs hex-ID variants of same product)
   const nameCounts = new Map<string, number>();
   const finalResult: T[] = [];
   for (const product of result) {
-    const name = String(product.name || "").trim().toLowerCase();
+    let name = String(product.name || "").trim().toLowerCase();
+    // Strip trailing size in parentheses, handles nested: "(XS (XXS Fit))", "(M)", "(EU 42)"
+    name = name.replace(/\s*\((?:[^()]*|\([^()]*\))*\)\s*$/, "").trim();
+    // Strip trailing size after separator: "- M", "/ L", etc.
+    name = name.replace(/\s*[-–\/|]\s*(xxs|xs|s|m|l|xl|xxl|xxxl|2xl|3xl|4xl|\d{2,3})\s*$/i, "").trim();
     if (!name) { finalResult.push(product); continue; }
     const current = nameCounts.get(name) || 0;
     if (current < maxPerBase) {

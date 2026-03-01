@@ -46,12 +46,6 @@ const MATERIAL_TO_HU: Record<string, string> = {
   canvas: "vászon", recycled: "újrahasznosított",
 };
 
-/**
- * Hungarian adjectives for style
- */
-const STYLE_ADJECTIVES = [
-  "stílusos", "kényelmes", "divatos", "prémium", "modern", "elegáns", "menő"
-];
 
 /**
  * Strip HTML tags from text.
@@ -163,21 +157,13 @@ function buildAttributeSummary(product: Product): string {
   }
 
   // Color
-  const color = getPrimaryColor(
-    product.name,
-    productAny.color,
-    Array.isArray(productAny.tags) ? productAny.tags.join(" ") : ""
-  );
+  const color = detectColorHu(product);
   if (color) {
     parts.push(color);
   }
 
   // Material
-  const material = getPrimaryMaterial(
-    product.description,
-    productAny.composition,
-    Array.isArray(productAny.tags) ? productAny.tags.join(" ") : ""
-  );
+  const material = detectMaterialHu(product);
   if (material) {
     parts.push(material);
   }
@@ -194,17 +180,12 @@ function buildAttributeSummary(product: Product): string {
 }
 
 /**
- * Detect color from product data and translate to Hungarian
+ * Detect color from product data and translate to Hungarian.
+ * Only checks the product name — descriptions often mention multiple colors
+ * ("also available in red, blue...") causing false positives.
  */
 function detectColorHu(product: Product): string | null {
-  const productAny = product as any;
-  const searchText = [
-    product.name,
-    productAny.color,
-    product.description,
-    Array.isArray(productAny.tags) ? productAny.tags.join(" ") : ""
-  ].join(" ").toLowerCase();
-  
+  const searchText = (product.name || "").toLowerCase();
   for (const [eng, hu] of Object.entries(COLOR_TO_HU)) {
     if (searchText.includes(eng)) {
       return hu;
@@ -214,30 +195,71 @@ function detectColorHu(product: Product): string | null {
 }
 
 /**
- * Detect product type and translate to Hungarian
+ * Detect product type and translate to Hungarian.
+ * Uses last category segment + word boundaries to avoid substring false positives
+ * (e.g. "shirt" matching inside "sweatshirt" or "t-shirt").
+ * More specific types are checked before generic ones.
  */
 function detectTypeHu(product: Product): string | null {
-  const searchText = [
-    product.name,
-    product.category,
-    (product as any).type,
-    (product as any).itemType
-  ].join(" ").toLowerCase();
-  
-  // Check specific types first
-  for (const [eng, hu] of Object.entries(TYPE_TO_HU)) {
-    if (searchText.includes(eng)) {
+  const name = (product.name || "").toLowerCase();
+  const fullCat = (product.category || "").toLowerCase();
+  // Use last category segment to avoid false matches from parent path
+  const lastCat = fullCat.includes(">") ? fullCat.split(">").pop()!.trim() : fullCat;
+  const searchText = `${name} ${lastCat}`;
+
+  // Ordered: specific before generic (hoodie/sweatshirt before shirt, t-shirt before shirt)
+  const orderedTypes: [string, string][] = [
+    ["hoodie", "kapucnis pulóver"],
+    ["sweatshirt", "pulóver"],
+    ["crewneck", "pulóver"],
+    ["t-shirt", "póló"],
+    ["tee", "póló"],
+    ["polo", "galléros póló"],
+    ["tank top", "top"],
+    ["shirt", "ing"],
+    ["shorts", "rövidnadrág"],
+    ["jogger", "nadrág"],
+    ["sweatpant", "nadrág"],
+    ["pants", "nadrág"],
+    ["trousers", "nadrág"],
+    ["jeans", "farmer"],
+    ["dress", "ruha"],
+    ["skirt", "szoknya"],
+    ["coat", "kabát"],
+    ["parka", "kabát"],
+    ["jacket", "dzseki"],
+    ["bomber", "dzseki"],
+    ["sweater", "pulóver"],
+    ["cardigan", "kardigán"],
+    ["sneakers", "sneaker cipő"],
+    ["sneaker", "sneaker cipő"],
+    ["boots", "csizma"],
+    ["shoes", "cipő"],
+    ["backpack", "hátizsák"],
+    ["bag", "táska"],
+    ["beanie", "téli sapka"],
+    ["cap", "sapka"],
+    ["hat", "kalap"],
+    ["socks", "zokni"],
+    ["scarf", "sál"],
+    ["gloves", "kesztyű"],
+    ["belt", "öv"],
+    ["watch", "óra"],
+    ["underwear", "fehérnemű"],
+    ["swimwear", "fürdőruha"],
+  ];
+
+  for (const [eng, hu] of orderedTypes) {
+    if (new RegExp(`\\b${eng.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(searchText)) {
       return hu;
     }
   }
-  
-  // Check category patterns
-  if (searchText.includes("t-shirt") || searchText.includes("clothing tops")) return "póló";
-  if (searchText.includes("hoodie") || searchText.includes("sweatshirt")) return "pulóver";
-  if (searchText.includes("sneaker") || searchText.includes("footwear")) return "cipő";
-  if (searchText.includes("luggage") || searchText.includes("duffel")) return "táska";
-  if (searchText.includes("accessori")) return "kiegészítő";
-  
+
+  // Fallback category patterns
+  if (/footwear/.test(searchText)) return "cipő";
+  if (/luggage|duffel/.test(searchText)) return "táska";
+  if (/accessor/.test(searchText)) return "kiegészítő";
+
   return null;
 }
 
@@ -292,40 +314,45 @@ function extractKeyFeatures(description: string): string[] {
 }
 
 /**
- * Build a natural Hungarian reason sentence with content from catalog.
- * Examples: "Prémium fekete pamut póló, bő szabású, kényelmes viselet"
+ * Build a factual Hungarian card description from product attributes.
+ * Format: "[Szín] [anyag] [típus][, jellemzők]"
+ * No generic adjectives — only real product data.
+ * Examples:
+ *   "Lila kapucnis pulóver, 100% poliészter, bő szabású"
+ *   "Fekete póló, organikus pamut"
+ *   "Rövidnadrág, relaxed szabás"
  */
 export function buildCardDescription(product: Product): string {
   const color = detectColorHu(product);
   const type = detectTypeHu(product);
   const material = detectMaterialHu(product);
   const features = extractKeyFeatures(product.description || "");
-  
-  // Pick a style adjective based on product name hash (consistent)
-  const nameHash = (product.name || "").length % STYLE_ADJECTIVES.length;
-  const adj = STYLE_ADJECTIVES[nameHash];
-  
-  // Build natural Hungarian phrase: "Adj [color] [material] [type], [feature1], [feature2]"
+
   const parts: string[] = [];
-  
-  // Main description
-  parts.push(adj.charAt(0).toUpperCase() + adj.slice(1));
-  if (color) parts.push(color);
-  if (material) parts.push(material);
+
+  // Start with color (capitalized) + type as the core
+  const core: string[] = [];
+  if (color) core.push(color.charAt(0).toUpperCase() + color.slice(1));
+  if (material) core.push(material);
   if (type) {
-    parts.push(type);
+    core.push(type);
   } else {
-    parts.push("termék");
+    // Fallback: use last category segment as type
+    const cat = (product.category || "");
+    const lastCat = cat.includes(">") ? cat.split(">").pop()!.trim() : cat;
+    if (lastCat && lastCat.length < 40) core.push(lastCat);
   }
-  
-  let result = parts.join(" ");
-  
-  // Add features if room
-  if (features.length > 0 && result.length < MAX_DESCRIPTION_LENGTH - 30) {
-    result += " – " + features.join(", ");
+
+  if (core.length === 0) return product.name || "";
+
+  parts.push(core.join(" "));
+
+  // Append features after comma
+  if (features.length > 0) {
+    parts.push(features.join(", "));
   }
-  
-  return truncateWithEllipsis(result, MAX_DESCRIPTION_LENGTH);
+
+  return truncateWithEllipsis(parts.join(", "), MAX_DESCRIPTION_LENGTH);
 }
 
 /**
@@ -376,12 +403,7 @@ export function buildRecommendationReason(
   }
 
   if (parts.length === 0) {
-    // Generic fallback based on product
-    const color = getPrimaryColor(
-      product.name,
-      productAny.color,
-      Array.isArray(productAny.tags) ? productAny.tags.join(" ") : ""
-    );
+    const color = detectColorHu(product);
     if (color) {
       parts.push(`${color} színű`);
     }
@@ -413,11 +435,7 @@ export function getCardInfo(product: Product): CardInfo {
     description: buildCardDescription(product),
     price: productAny.price || null,
     brand: productAny.brand || null,
-    color: getPrimaryColor(
-      product.name,
-      productAny.color,
-      Array.isArray(productAny.tags) ? productAny.tags.join(" ") : ""
-    ),
+    color: detectColorHu(product),
     imageUrl: productAny.imageUrl || productAny.image || null,
   };
 }

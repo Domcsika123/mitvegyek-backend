@@ -1687,7 +1687,7 @@
 
   /* ===================== RESULTS RENDERING ===================== */
 
-  function formatPriceFt(num) {
+  function formatPriceFt(num, itemCurrency) {
     if (num === null || num === undefined) return "";
     // Robust number parsing: handle strings like "65.000,00" or "27999,00"
     var raw = String(num).trim();
@@ -1704,7 +1704,8 @@
     if (isNaN(n) || n <= 0) return "";
 
     var t = getTheme();
-    var cur = t.currency || "HUF";
+    // Per-product currency overrides the theme currency (e.g. HUF-priced items in EUR catalog)
+    var cur = itemCurrency || t.currency || "HUF";
 
     // HUF: always whole number, space as thousands separator
     if (cur === "HUF") {
@@ -1766,7 +1767,7 @@
       nameEl.textContent = item.name || "Ismeretlen term\u00E9k";
       var priceEl = document.createElement("div");
       priceEl.className = "mv-widget-result-price";
-      priceEl.textContent = item.price !== undefined && item.price !== null ? formatPriceFt(item.price) : "";
+      priceEl.textContent = item.price !== undefined && item.price !== null ? formatPriceFt(item.price, item.price_currency) : "";
       topLine.appendChild(nameEl);
       topLine.appendChild(priceEl);
       var reasonEl = document.createElement("div");
