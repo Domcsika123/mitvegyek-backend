@@ -112,7 +112,9 @@ async function generateBatch(batch: Product[]): Promise<Map<string, string>> {
  * CONCURRENCY parallel API calls → ~5x faster than sequential.
  * Returns the products array with ai_description populated on each product.
  */
-export async function generateProductDescriptions(products: Product[]): Promise<Product[]> {
+export async function generateProductDescriptions(
+  products: Product[]
+): Promise<Product[]> {
   // Split into batches
   const batches: Product[][] = [];
   for (let i = 0; i < products.length; i += BATCH_SIZE) {
@@ -120,7 +122,7 @@ export async function generateProductDescriptions(products: Product[]): Promise<
   }
 
   let completed = 0;
-  let total = 0;
+  let descGenerated = 0;
 
   // Process in parallel windows of CONCURRENCY
   for (let i = 0; i < batches.length; i += CONCURRENCY) {
@@ -134,17 +136,17 @@ export async function generateProductDescriptions(products: Product[]): Promise<
         const desc = batchResult.get(p.product_id);
         if (desc) {
           (p as any).ai_description = desc;
-          total++;
+          descGenerated++;
         }
       }
     }
 
     completed += window.reduce((s, b) => s + b.length, 0);
     console.log(
-      `[generateDescriptions] ${Math.min(completed, products.length)}/${products.length} done (${total} descriptions generated)`
+      `[generateDescriptions] ${Math.min(completed, products.length)}/${products.length} done (${descGenerated} descriptions generated)`
     );
   }
 
-  console.log(`[generateDescriptions] Complete: ${total}/${products.length} descriptions generated`);
+  console.log(`[generateDescriptions] Complete: ${descGenerated}/${products.length} descriptions generated`);
   return products;
 }

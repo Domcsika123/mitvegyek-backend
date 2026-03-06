@@ -824,12 +824,16 @@ router.post("/recommend", async (req, res) => {
       const colorList = [...querySignals.colors].join("/");
       notice = `${colorList ? colorList.charAt(0).toUpperCase() + colorList.slice(1) + " " : ""}${querySignals.type || "termék"} nem szerepel a kínálatban. Íme a legközelebb eső alternatívák:`;
     } else if (budgetFilterSkipped) {
-      const fmt = (n: number) => n.toLocaleString("hu-HU");
+      const wCfg = getPublicWidgetConfig(siteKey || "default");
+      const currency = wCfg?.ui?.theme?.currency || "HUF";
+      const currencySymbol = currency === "EUR" ? "€" : currency === "USD" ? "$" : "Ft";
+      const fmt = (n: number) => currency === "HUF" ? n.toLocaleString("hu-HU") : n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+      const fmtPrice = (n: number) => currency === "USD" ? `$${fmt(n)}` : currency === "EUR" ? `${fmt(n)} €` : `${fmt(n)} Ft`;
       const priceStr = hasBudgetMax && hasBudgetMin
-        ? `${fmt(user.budget_min!)}–${fmt(user.budget_max!)} Ft közötti`
+        ? `${fmtPrice(user.budget_min!)}–${fmtPrice(user.budget_max!)} közötti`
         : hasBudgetMax
-          ? `${fmt(user.budget_max!)} Ft alatti`
-          : `${fmt(user.budget_min!)} Ft feletti`;
+          ? `${fmtPrice(user.budget_max!)} alatti`
+          : `${fmtPrice(user.budget_min!)} feletti`;
       notice = `${priceStr} ${querySignals.type || "termék"} nem szerepel a kínálatban. Íme a legközelebb eső alternatívák:`;
     } else if (noExactMatch) {
       notice = "A keresett termék nem szerepel a kínálatban. Íme a legközelebb eső alternatívák:";

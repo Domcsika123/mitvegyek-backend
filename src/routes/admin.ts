@@ -55,90 +55,71 @@ router.get("/catalogs", (req, res) => {
 });
 
 router.post("/import-products", async (req, res) => {
+  const { site_key, items } = req.body || {};
+
+  if (!site_key || typeof site_key !== "string") {
+    return res.status(400).json({ error: "site_key kötelező és string legyen." });
+  }
+  const partner = findPartnerBySiteKey(site_key);
+  if (!partner) {
+    return res.status(400).json({ error: `Nincs ilyen partner vagy site_key: ${site_key}` });
+  }
+  if (!Array.isArray(items)) {
+    return res.status(400).json({ error: "items tömb szükséges." });
+  }
+
+  const products: Product[] = [];
+  for (const raw of items) {
+    if (!raw) continue;
+    const p: Product = {
+      product_id: String(raw.product_id || "").trim(),
+      name: String(raw.name || "").trim(),
+      price: Number(raw.price ?? 0),
+      category: String(raw.category || "").trim(),
+      description: String(raw.description || "").trim(),
+      image_url: raw.image_url ? String(raw.image_url) : undefined,
+      product_url: raw.product_url ? String(raw.product_url) : undefined,
+      tags: raw.tags ? String(raw.tags) : undefined,
+      product_type: raw.product_type ? String(raw.product_type) : undefined,
+      vendor: raw.vendor ? String(raw.vendor) : undefined,
+    };
+    if (!p.product_id || !p.name) {
+      return res.status(400).json({ error: "Minden terméknek kell product_id és name mező." });
+    }
+    if (Number.isNaN(p.price)) {
+      return res.status(400).json({ error: `Érvénytelen price érték a terméknél: ${p.product_id}` });
+    }
+    products.push(p);
+  }
+
   try {
-    const { site_key, items } = req.body || {};
-
-    if (!site_key || typeof site_key !== "string") {
-      return res.status(400).json({ error: "site_key kötelező és string legyen." });
-    }
-
-    const partner = findPartnerBySiteKey(site_key);
-    if (!partner) {
-      return res.status(400).json({ error: `Nincs ilyen partner vagy site_key: ${site_key}` });
-    }
-
-    if (!Array.isArray(items)) {
-      return res.status(400).json({ error: "items tömb szükséges." });
-    }
-
-    const products: Product[] = [];
-
-    for (const raw of items) {
-      if (!raw) continue;
-
-      const p: Product = {
-        product_id: String(raw.product_id || "").trim(),
-        name: String(raw.name || "").trim(),
-        price: Number(raw.price ?? 0),
-        category: String(raw.category || "").trim(),
-        description: String(raw.description || "").trim(),
-        image_url: raw.image_url ? String(raw.image_url) : undefined,
-        product_url: raw.product_url ? String(raw.product_url) : undefined,
-        // ✅ Shopify extra mezők (fashion attribute matching-hez)
-        tags: raw.tags ? String(raw.tags) : undefined,
-        product_type: raw.product_type ? String(raw.product_type) : undefined,
-        vendor: raw.vendor ? String(raw.vendor) : undefined,
-      };
-
-      if (!p.product_id || !p.name) {
-        return res.status(400).json({ error: "Minden terméknek kell product_id és name mező." });
-      }
-
-      if (Number.isNaN(p.price)) {
-        return res.status(400).json({ error: `Érvénytelen price érték a terméknél: ${p.product_id}` });
-      }
-
-      products.push(p);
-    }
-
     const batchSize = Number(process.env.EMBED_BATCH_SIZE || 64) || 64;
-
-    let productsWithEmbeddings: Product[] = [];
+    let embedded = products;
     try {
-      productsWithEmbeddings = await embedProductsInBatches(products, batchSize);
+      embedded = await embedProductsInBatches(products, batchSize);
     } catch (e) {
       console.error("Embedding generálási hiba importkor:", e);
-      return res.status(500).json({
-        error: "Embedding generálás hiba. Ellenőrizd az OPENAI_API_KEY-t és próbáld újra.",
-      });
+      return res.status(500).json({ error: "Embedding generálás sikertelen." });
     }
 
-    // Generate AI descriptions for all products (once at import time)
-    let productsWithDescriptions = productsWithEmbeddings;
+    let withDescriptions = embedded;
     try {
-      console.log(`[admin] Generating AI descriptions for ${productsWithEmbeddings.length} products...`);
-      productsWithDescriptions = await generateProductDescriptions(productsWithEmbeddings);
-      const descCount = productsWithDescriptions.filter((p: any) => !!p.ai_description).length;
-      console.log(`[admin] AI descriptions generated: ${descCount}/${productsWithDescriptions.length}`);
+      console.log(`[admin] Generating AI descriptions for ${embedded.length} products...`);
+      withDescriptions = await generateProductDescriptions(embedded);
     } catch (e) {
       console.error("[admin] Description generation failed (non-fatal, continuing without):", e);
     }
 
-    replaceCatalog(site_key, productsWithDescriptions, true);
+    replaceCatalog(site_key, withDescriptions, true);
 
-    const embeddedCount = productsWithDescriptions.filter((p: any) => Array.isArray(p.embedding)).length;
+    const count = withDescriptions.length;
+    const embeddedCount = withDescriptions.filter((p: any) => Array.isArray(p.embedding)).length;
+    const batchSizeUsed = batchSize;
 
-    return res.json({
-      ok: true,
-      site_key,
-      count: productsWithEmbeddings.length,
-      embedded: embeddedCount,
-      batchSize,
-    });
+    return res.json({ ok: true, site_key, count, embedded: embeddedCount, batchSize: batchSizeUsed });
   } catch (err) {
     console.error("Hiba a /api/admin/import-products hívásban:", err);
-    const errorMessage = err instanceof Error ? err.message : "Ismeretlen szerverhiba";
-    return res.status(500).json({ error: `Hiba történt az import során: ${errorMessage}` });
+    return res.status(500).json({ error: "Ismeretlen szerverhiba az import során." });
   }
 });
 

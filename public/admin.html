@@ -887,6 +887,7 @@
           <button id="csv-import-btn" class="mv-btn mv-btn-primary" style="margin-top: 0; margin-right: 0;">CSV importálása</button>
           <div id="csv-status" class="mv-status"></div>
         </div>
+
       </div>
     </div>
 
@@ -1634,47 +1635,26 @@
 
             setStatus(statusEl, `Import folyamatban... (${items.length} termék)`, true);
 
-            const response = await adminFetch("/api/admin/import-products", {
+            var importData = await adminFetch("/api/admin/import-products", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ site_key: siteKey, items }),
-            });
+            }).then(function(r) { return r.json(); });
 
-            if (!response || !response.ok) {
-              const status = response ? response.status : 0;
-              const rawText = response ? await response.text().catch(() => "") : "";
-              let errMsg = "Ismeretlen hiba";
-              try {
-                const errData = JSON.parse(rawText);
-                errMsg = errData.error || `HTTP ${status}`;
-              } catch {
-                if (status === 502 || status === 503) {
-                  errMsg = "A szerver éppen indul (Render spin-up). Várj ~30 másodpercet és próbáld újra.";
-                } else if (status === 504) {
-                  errMsg = "Szerver timeout – az import túl sokáig tartott. Próbálj kisebb CSV-vel.";
-                } else if (status === 401) {
-                  errMsg = "Munkamenet lejárt – jelentkezz be újra.";
-                } else if (rawText) {
-                  errMsg = `HTTP ${status}: ${rawText.replace(/<[^>]+>/g, "").trim().slice(0, 200)}`;
-                } else {
-                  errMsg = `HTTP ${status}: szerver nem válaszolt`;
-                }
-              }
-              throw new Error(errMsg);
+            if (!importData || !importData.ok) {
+              throw new Error(importData?.error || "Import sikertelen");
             }
 
-            const data = await response.json();
-            setStatus(statusEl, `Sikeres import: ${data.count} termék.`, true);
+            setStatus(statusEl, "Sikeres import: " + importData.count + " termék.", true);
 
             if (siteKeyInput) siteKeyInput.value = "";
             if (fileInput) fileInput.value = "";
-
-            ["col-id","col-name","col-price","col-category","col-description","col-url","col-image"].forEach((id) => {
-              const inp = safeGet(id);
+            ["col-id","col-name","col-price","col-category","col-description","col-url","col-image"].forEach(function(id) {
+              var inp = safeGet(id);
               if (inp) inp.value = "";
             });
 
-            setTimeout(() => setStatus(statusEl, "", null), 3000);
+            setTimeout(function() { setStatus(statusEl, "", null); }, 4000);
 
             await loadCatalogs();
             await loadStatsOverview();
