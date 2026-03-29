@@ -888,6 +888,17 @@
           <div id="csv-status" class="mv-status"></div>
         </div>
 
+        <!-- Progress bar -->
+        <div id="csv-progress-wrap" style="display:none; margin-top: 12px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+            <span id="csv-progress-phase" style="font-size:13px; color:#555;"></span>
+            <span id="csv-progress-pct" style="font-size:13px; font-weight:600; color:#2563eb;"></span>
+          </div>
+          <div style="width:100%; height:8px; background:#e5e7eb; border-radius:4px; overflow:hidden;">
+            <div id="csv-progress-bar" style="height:100%; width:0%; background:linear-gradient(90deg,#2563eb,#3b82f6); border-radius:4px; transition:width 0.4s ease;"></div>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -1633,7 +1644,17 @@
               return;
             }
 
-            setStatus(statusEl, `Import folyamatban... (${items.length} termék)`, true);
+            setStatus(statusEl, `Import indítása... (${items.length} termék)`, true);
+
+            // Show progress bar
+            const progressWrap = safeGet("csv-progress-wrap");
+            const progressBar = safeGet("csv-progress-bar");
+            const progressPct = safeGet("csv-progress-pct");
+            const progressPhase = safeGet("csv-progress-phase");
+            if (progressWrap) progressWrap.style.display = "block";
+            if (progressBar) progressBar.style.width = "0%";
+            if (progressPct) progressPct.textContent = "0%";
+            if (progressPhase) progressPhase.textContent = "Indítás...";
 
             var importData = await adminFetch("/api/admin/import-products", {
               method: "POST",
@@ -1642,10 +1663,45 @@
             }).then(function(r) { return r.json(); });
 
             if (!importData || !importData.ok) {
+              if (progressWrap) progressWrap.style.display = "none";
               throw new Error(importData?.error || "Import sikertelen");
             }
 
-            setStatus(statusEl, "Sikeres import: " + importData.count + " termék.", true);
+            // If async import with jobId, poll for progress
+            if (importData.async && importData.jobId) {
+              const jobId = importData.jobId;
+              setStatus(statusEl, `Import folyamatban... (${items.length} termék)`, true);
+
+              await new Promise(function(resolve, reject) {
+                const poll = setInterval(async function() {
+                  try {
+                    const prog = await adminFetch("/api/admin/import-progress/" + jobId)
+                      .then(function(r) { return r.json(); });
+
+                    if (progressBar) progressBar.style.width = prog.percent + "%";
+                    if (progressPct) progressPct.textContent = prog.percent + "%";
+                    if (progressPhase) progressPhase.textContent = prog.phase || "";
+
+                    if (prog.status === "done") {
+                      clearInterval(poll);
+                      importData = prog.result || importData;
+                      resolve();
+                    } else if (prog.status === "error") {
+                      clearInterval(poll);
+                      reject(new Error(prog.error || "Import sikertelen"));
+                    }
+                  } catch (e) {
+                    // polling error, keep trying
+                  }
+                }, 1500);
+              });
+            }
+
+            if (progressBar) progressBar.style.width = "100%";
+            if (progressPct) progressPct.textContent = "100%";
+            if (progressPhase) progressPhase.textContent = "Kész!";
+
+            setStatus(statusEl, "Sikeres import: " + (importData.count || items.length) + " termék.", true);
 
             if (siteKeyInput) siteKeyInput.value = "";
             if (fileInput) fileInput.value = "";
@@ -1654,7 +1710,10 @@
               if (inp) inp.value = "";
             });
 
-            setTimeout(function() { setStatus(statusEl, "", null); }, 4000);
+            setTimeout(function() {
+              setStatus(statusEl, "", null);
+              if (progressWrap) progressWrap.style.display = "none";
+            }, 4000);
 
             await loadCatalogs();
             await loadStatsOverview();

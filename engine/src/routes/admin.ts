@@ -57,6 +57,23 @@ router.get("/catalogs", (req, res) => {
   }
 });
 
+// ─── Import progress tracking ────────────────────────────────────────────────
+interface ImportJob {
+  status: "running" | "done" | "error";
+  phase: string;
+  percent: number;
+  total: number;
+  error?: string;
+  result?: any;
+}
+const importJobs = new Map<string, ImportJob>();
+
+router.get("/import-progress/:jobId", (req, res) => {
+  const job = importJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "Job not found" });
+  res.json(job);
+});
+
 router.post("/import-products", async (req, res) => {
   const { site_key, items } = req.body || {};
 
@@ -95,59 +112,90 @@ router.post("/import-products", async (req, res) => {
     products.push(p);
   }
 
-  try {
-    // Vizuális attribútumok kinyerése
-    const productsWithVisuals: Product[] = [];
-    for (const product of products) {
-      if (product.image_url) {
-        const visualTags = await describeImage(product.image_url);
-        if (visualTags) {
-          product.visual_tags = visualTags;
+  // Start async import, return job ID immediately
+  const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const job: ImportJob = { status: "running", phase: "Vizuális elemzés...", percent: 0, total: products.length };
+  importJobs.set(jobId, job);
+
+  res.json({ ok: true, async: true, jobId, total: products.length });
+
+  // Run import in background
+  (async () => {
+    try {
+      // Phase 1: Visual analysis (0-20%)
+      job.phase = "Vizuális elemzés...";
+      const productsWithVisuals: Product[] = [];
+      for (let i = 0; i < products.length; i++) {
+        const product = products[i];
+        if (product.image_url) {
+          const visualTags = await describeImage(product.image_url);
+          if (visualTags) product.visual_tags = visualTags;
         }
+        productsWithVisuals.push(product);
+        job.percent = Math.round((i + 1) / products.length * 20);
       }
-      productsWithVisuals.push(product);
-    }
 
-    const batchSize = Number(process.env.EMBED_BATCH_SIZE || 64) || 64;
-    let embedded = productsWithVisuals;
-    try {
-      embedded = await embedProductsInBatches(productsWithVisuals, batchSize);
-    } catch (e) {
-      console.error("Embedding generálási hiba importkor:", e);
-      return res.status(500).json({ error: "Embedding generálás sikertelen." });
-    }
-
-    let withDescriptions = embedded;
-    try {
-      console.log(`[admin] Generating AI descriptions for ${embedded.length} products...`);
-      withDescriptions = await generateProductDescriptions(embedded);
-    } catch (e) {
-      console.error("[admin] Description generation failed (non-fatal, continuing without):", e);
-    }
-
-    replaceCatalog(site_key, withDescriptions, true);
-
-    // Típusok kinyerése és widget config frissítése (non-fatal)
-    let typesExtracted = 0;
-    try {
-      const typeOptions = await extractCatalogTypes(withDescriptions);
-      if (typeOptions.length > 0) {
-        updateTypeFieldOptions(site_key, typeOptions);
-        typesExtracted = typeOptions.length;
+      // Phase 2: Embeddings (20-60%)
+      job.phase = "Embedding generálás...";
+      job.percent = 20;
+      const batchSize = Number(process.env.EMBED_BATCH_SIZE || 64) || 64;
+      let embedded = productsWithVisuals;
+      try {
+        embedded = await embedProductsInBatches(productsWithVisuals, batchSize, (done, total) => {
+          job.percent = 20 + Math.round(done / total * 40);
+        });
+      } catch (e) {
+        console.error("Embedding generálási hiba importkor:", e);
+        job.status = "error";
+        job.error = "Embedding generálás sikertelen.";
+        return;
       }
-    } catch (e) {
-      console.error("[admin] Típus kinyerés sikertelen (non-fatal):", e);
+
+      // Phase 3: AI descriptions + fashion tags (60-90%)
+      job.phase = "AI leírások generálása...";
+      job.percent = 60;
+      let withDescriptions = embedded;
+      try {
+        console.log(`[admin] Generating AI descriptions for ${embedded.length} products...`);
+        withDescriptions = await generateProductDescriptions(embedded, (done, total) => {
+          job.percent = 60 + Math.round(done / total * 30);
+        });
+      } catch (e) {
+        console.error("[admin] Description generation failed (non-fatal, continuing without):", e);
+      }
+
+      // Phase 4: Save + type extraction (90-100%)
+      job.phase = "Mentés...";
+      job.percent = 90;
+      replaceCatalog(site_key, withDescriptions, true);
+
+      let typesExtracted = 0;
+      try {
+        const typeOptions = await extractCatalogTypes(withDescriptions);
+        if (typeOptions.length > 0) {
+          updateTypeFieldOptions(site_key, typeOptions);
+          typesExtracted = typeOptions.length;
+        }
+      } catch (e) {
+        console.error("[admin] Típus kinyerés sikertelen (non-fatal):", e);
+      }
+
+      const count = withDescriptions.length;
+      const embeddedCount = withDescriptions.filter((p: any) => Array.isArray(p.embedding)).length;
+
+      job.status = "done";
+      job.percent = 100;
+      job.phase = "Kész!";
+      job.result = { ok: true, site_key, count, embedded: embeddedCount, typesExtracted };
+
+      // Clean up job after 5 minutes
+      setTimeout(() => importJobs.delete(jobId), 5 * 60 * 1000);
+    } catch (err) {
+      console.error("Hiba a /api/admin/import-products hívásban:", err);
+      job.status = "error";
+      job.error = "Ismeretlen szerverhiba az import során.";
     }
-
-    const count = withDescriptions.length;
-    const embeddedCount = withDescriptions.filter((p: any) => Array.isArray(p.embedding)).length;
-    const batchSizeUsed = batchSize;
-
-    return res.json({ ok: true, site_key, count, embedded: embeddedCount, batchSize: batchSizeUsed, typesExtracted });
-  } catch (err) {
-    console.error("Hiba a /api/admin/import-products hívásban:", err);
-    return res.status(500).json({ error: "Ismeretlen szerverhiba az import során." });
-  }
+  })();
 });
 
 router.delete("/catalogs/:site_key", (req, res) => {

@@ -276,10 +276,12 @@ async function generateVisionBatch(batch: Product[]): Promise<Map<string, BatchR
  * Products without image_url → gpt-4.1-mini text (batch 50, concurrency 5)
  */
 export async function generateProductDescriptions(
-  products: Product[]
+  products: Product[],
+  onProgress?: (done: number, total: number) => void
 ): Promise<Product[]> {
   const withImage = products.filter((p) => !!(p as any).image_url);
   const noImage = products.filter((p) => !(p as any).image_url);
+  const total = products.length;
 
   console.log(`[generateDescriptions] ${withImage.length} vision products, ${noImage.length} text-only products`);
 
@@ -298,6 +300,7 @@ export async function generateProductDescriptions(
     results.forEach((r) => r.forEach((v, k) => resultMap.set(k, v)));
     visionDone += window.reduce((s, b) => s + b.length, 0);
     console.log(`[generateDescriptions] Vision: ${Math.min(visionDone, withImage.length)}/${withImage.length}`);
+    if (onProgress) onProgress(Math.min(visionDone, withImage.length), total);
   }
 
   // ── Text batches ────────────────────────────────────────────────────────
@@ -313,6 +316,7 @@ export async function generateProductDescriptions(
     results.forEach((r) => r.forEach((v, k) => resultMap.set(k, v)));
     textDone += window.reduce((s, b) => s + b.length, 0);
     console.log(`[generateDescriptions] Text: ${Math.min(textDone, noImage.length)}/${noImage.length}`);
+    if (onProgress) onProgress(withImage.length + Math.min(textDone, noImage.length), total);
   }
 
   // ── Apply to products ────────────────────────────────────────────────────

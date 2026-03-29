@@ -231,7 +231,8 @@ async function embedSingle(text: string, model = "text-embedding-3-large"): Prom
  */
 export async function embedProductsInBatches(
   products: Product[],
-  batchSize = 64
+  batchSize = 64,
+  onProgress?: (done: number, total: number) => void
 ): Promise<Product[]> {
   if (!products || products.length === 0) return [];
 
@@ -269,6 +270,8 @@ export async function embedProductsInBatches(
         embedding: emb,
       });
     }
+
+    if (onProgress) onProgress(Math.min(i + batchSize, products.length), products.length);
   }
 
   return out;
