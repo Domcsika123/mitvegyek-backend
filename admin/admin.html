@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <title>Mitvegyek.ai – Admin</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
   <style>
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -1644,7 +1645,7 @@
               return;
             }
 
-            setStatus(statusEl, `Import indítása... (${items.length} termék)`, true);
+            setStatus(statusEl, `Import folyamatban... (${items.length} termék)`, true);
 
             // Show progress bar
             const progressWrap = safeGet("csv-progress-wrap");
@@ -1656,52 +1657,70 @@
             if (progressPct) progressPct.textContent = "0%";
             if (progressPhase) progressPhase.textContent = "Indítás...";
 
-            var importData = await adminFetch("/api/admin/import-products", {
+            // Start import (server waits until done) + poll progress in parallel
+            var importDone = false;
+            var importData = null;
+            var importError = null;
+
+            // Start the import request (will take minutes)
+            const importPromise = adminFetch("/api/admin/import-products", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ site_key: siteKey, items }),
-            }).then(function(r) { return r.json(); });
+            }).then(function(r) { return r.json(); }).then(function(data) {
+              importData = data;
+              importDone = true;
+            }).catch(function(err) {
+              importError = err;
+              importDone = true;
+            });
+
+            // Poll progress while import is running
+            const pollTimer = setInterval(async function() {
+              if (importDone) { clearInterval(pollTimer); return; }
+              try {
+                // Try to find a running job for this import
+                const jobs = await adminFetch("/api/admin/import-progress/latest")
+                  .then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+                if (jobs && jobs.percent !== undefined) {
+                  if (progressBar) progressBar.style.width = jobs.percent + "%";
+                  if (progressPct) progressPct.textContent = jobs.percent + "%";
+                  if (progressPhase) progressPhase.textContent = jobs.phase || "";
+                }
+              } catch(e) {}
+            }, 2000);
+
+            // Wait for import to finish
+            await importPromise;
+            clearInterval(pollTimer);
+
+            if (importError) {
+              if (progressWrap) progressWrap.style.display = "none";
+              throw importError;
+            }
 
             if (!importData || !importData.ok) {
               if (progressWrap) progressWrap.style.display = "none";
-              throw new Error(importData?.error || "Import sikertelen");
+              throw new Error((importData && importData.error) || "Import sikertelen");
             }
 
-            // If async import with jobId, poll for progress
-            if (importData.async && importData.jobId) {
-              const jobId = importData.jobId;
-              setStatus(statusEl, `Import folyamatban... (${items.length} termék)`, true);
-
-              await new Promise(function(resolve, reject) {
-                const poll = setInterval(async function() {
-                  try {
-                    const prog = await adminFetch("/api/admin/import-progress/" + jobId)
-                      .then(function(r) { return r.json(); });
-
-                    if (progressBar) progressBar.style.width = prog.percent + "%";
-                    if (progressPct) progressPct.textContent = prog.percent + "%";
-                    if (progressPhase) progressPhase.textContent = prog.phase || "";
-
-                    if (prog.status === "done") {
-                      clearInterval(poll);
-                      importData = prog.result || importData;
-                      resolve();
-                    } else if (prog.status === "error") {
-                      clearInterval(poll);
-                      reject(new Error(prog.error || "Import sikertelen"));
-                    }
-                  } catch (e) {
-                    // polling error, keep trying
-                  }
-                }, 1500);
-              });
+            // Also poll by jobId if available
+            if (importData.jobId) {
+              try {
+                const finalProg = await adminFetch("/api/admin/import-progress/" + importData.jobId)
+                  .then(function(r) { return r.json(); }).catch(function() { return null; });
+                if (finalProg && finalProg.percent !== undefined) {
+                  if (progressBar) progressBar.style.width = finalProg.percent + "%";
+                  if (progressPct) progressPct.textContent = finalProg.percent + "%";
+                }
+              } catch(e) {}
             }
 
             if (progressBar) progressBar.style.width = "100%";
             if (progressPct) progressPct.textContent = "100%";
             if (progressPhase) progressPhase.textContent = "Kész!";
 
-            setStatus(statusEl, "Sikeres import: " + (importData.count || items.length) + " termék.", true);
+            setStatus(statusEl, "Sikeres import: " + importData.count + " termék.", true);
 
             if (siteKeyInput) siteKeyInput.value = "";
             if (fileInput) fileInput.value = "";
