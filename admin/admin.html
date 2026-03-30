@@ -1633,11 +1633,16 @@
               const product_url = colUrl ? (row[colUrl] || "").toString().trim() : "";
               const image_url = colImage ? (row[colImage] || "").toString().trim() : "";
 
-              items.push({
+              const item = {
                 product_id, name, price, category, description,
                 product_url: product_url || undefined,
                 image_url: image_url || undefined,
-              });
+              };
+              // Pass through any extra columns (ai_description, fashion_tags, tags, product_type, vendor, visual_tags)
+              for (const key of ["ai_description", "fashion_tags", "visual_tags", "tags", "product_type", "vendor"]) {
+                if (row[key] && row[key].toString().trim()) item[key] = row[key].toString().trim();
+              }
+              items.push(item);
             }
 
             if (items.length === 0) {
