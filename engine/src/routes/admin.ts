@@ -113,6 +113,10 @@ router.post("/import-products", async (req, res) => {
       product_type: raw.product_type ? String(raw.product_type) : undefined,
       vendor: raw.vendor ? String(raw.vendor) : undefined,
     };
+    // Preserve pre-generated AI fields if present
+    if (raw.ai_description) (p as any).ai_description = String(raw.ai_description).trim();
+    if (raw.fashion_tags) (p as any).fashion_tags = String(raw.fashion_tags).trim();
+    if (raw.visual_tags) (p as any).visual_tags = String(raw.visual_tags).trim();
     if (!p.product_id || !p.name) {
       return res.status(400).json({ error: "Minden terméknek kell product_id és name mező." });
     }
@@ -127,18 +131,29 @@ router.post("/import-products", async (req, res) => {
   const job: ImportJob = { status: "running", phase: "Vizuális elemzés...", percent: 0, total: products.length };
   importJobs.set(jobId, job);
 
+  // Check if AI fields are already present (pre-generated import)
+  const hasPreGenerated = products.every((p: any) => p.ai_description);
+  if (hasPreGenerated) {
+    console.log(`[admin] All ${products.length} products have pre-generated ai_description — skipping visual+description phases`);
+  }
+
   try {
-    // Phase 1: Visual analysis (0-20%)
-    job.phase = "Vizuális elemzés...";
-    const productsWithVisuals: Product[] = [];
-    for (let i = 0; i < products.length; i++) {
-      const product = products[i];
-      if (product.image_url) {
-        const visualTags = await describeImage(product.image_url);
-        if (visualTags) product.visual_tags = visualTags;
+    // Phase 1: Visual analysis (0-20%) — skip if pre-generated
+    let productsWithVisuals = products;
+    if (!hasPreGenerated) {
+      job.phase = "Vizuális elemzés...";
+      productsWithVisuals = [];
+      for (let i = 0; i < products.length; i++) {
+        const product = products[i];
+        if (product.image_url) {
+          const visualTags = await describeImage(product.image_url);
+          if (visualTags) product.visual_tags = visualTags;
+        }
+        productsWithVisuals.push(product);
+        job.percent = Math.round((i + 1) / products.length * 20);
       }
-      productsWithVisuals.push(product);
-      job.percent = Math.round((i + 1) / products.length * 20);
+    } else {
+      job.percent = 20;
     }
 
     // Phase 2: Embeddings (20-60%)
@@ -157,17 +172,21 @@ router.post("/import-products", async (req, res) => {
       return res.status(500).json({ error: "Embedding generálás sikertelen." });
     }
 
-    // Phase 3: AI descriptions + fashion tags (60-90%)
-    job.phase = "AI leírások generálása...";
-    job.percent = 60;
+    // Phase 3: AI descriptions + fashion tags (60-90%) — skip if pre-generated
     let withDescriptions = embedded;
-    try {
-      console.log(`[admin] Generating AI descriptions for ${embedded.length} products...`);
-      withDescriptions = await generateProductDescriptions(embedded, (done, total) => {
-        job.percent = 60 + Math.round(done / total * 30);
-      });
-    } catch (e) {
-      console.error("[admin] Description generation failed (non-fatal, continuing without):", e);
+    if (!hasPreGenerated) {
+      job.phase = "AI leírások generálása...";
+      job.percent = 60;
+      try {
+        console.log(`[admin] Generating AI descriptions for ${embedded.length} products...`);
+        withDescriptions = await generateProductDescriptions(embedded, (done, total) => {
+          job.percent = 60 + Math.round(done / total * 30);
+        });
+      } catch (e) {
+        console.error("[admin] Description generation failed (non-fatal, continuing without):", e);
+      }
+    } else {
+      job.percent = 90;
     }
 
     // Phase 4: Save + type extraction (90-100%)
