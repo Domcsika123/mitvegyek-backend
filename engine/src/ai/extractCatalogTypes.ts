@@ -65,6 +65,8 @@ Rules:
 - Translate to Hungarian where natural (T-Shirt → Póló, Hoodie → Kapucnis pulóver, Zip up/Zip hoodie/Zipup → Zip up, Sweatshirt → Melegítő felső, Pants → Nadrág, Shorts → Rövidnadrág, Hat/Cap → Sapka, Jacket → Dzseki/Kabát, Dress → Ruha, Shoes/Sneakers → Cipő, Bag → Táska, Socks → Zokni, Jeans → Farmer, Skirt → Szoknya, Swimwear → Fürdőruha, Accessories → Kiegészítő, Phone Case/iPhone Case/Mobile Phone Cases → Telefontok, Boxer Shorts/Men's Underwear/Underwear/Lingerie → Fehérnemű)
 - IMPORTANT: "Phone Case", "Mobile Phone Cases", "iPhone Case" MUST become "Telefontok" — do NOT merge into Kiegészítő
 - IMPORTANT: "Boxer Shorts", "Men's Underwear", "Lingerie", "Bodysuits" (when underwear context) MUST become "Fehérnemű" — do NOT keep as "Boxer rövidnadrág" or separate
+- IMPORTANT: ALL bag/backpack subtypes MUST become "Táska": Backpack, Tote Bag, Tote, Crossbody Bag, Shoulder Bag, Duffel Bag, Clutch, Satchel, Fanny Pack, Bum Bag, Mini Bag, Gym Bag → all become "Táska"
+- IMPORTANT: ALL accessory subtypes MUST become "Kiegészítő": Necklace, Necklaces, Chain, Scarf, Scarves, Belt, Belts, Keychain, Gloves, Wallet, Watch, Sunglasses, Hair Accessory, Lanyard, Bracelet, Earring, Jewelry, Ring → all become "Kiegészítő" (unless they clearly map to Ékszer: Ring/Gyűrű, Bracelet/Karkötő, Earring/Fülbevaló only)
 - Keep well-known English fashion terms as-is if commonly used in HU (Hoodie, Bomber, Crop top, Tank top)
 - Max 20 items — merge similar/duplicate types
 - Sort by importance/frequency
