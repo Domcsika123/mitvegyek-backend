@@ -317,15 +317,13 @@ const TYPE_DEFINITIONS: TypeDefinition[] = [
   {
     type: 'Ékszer',
     phrases: [
-      'arany gyuru', 'ezust nyaklanc', 'gold ring', 'silver necklace',
+      'arany gyuru', 'gold ring',
     ],
     patterns: [
       /\b[eé]kszer\b/i,
       /\bjewel(?:ry|lery)?\b/i,
       /\bgy[uű]r[uű]\b/i,
       /\bring\b/i,
-      /\bnyakl[aá]nc\b/i,
-      /\bnecklace\b/i,
       /\bkark[oö]t[oő]\b/i,
       /\bbracelet\b/i,
       /\bf[uü]lbeval[oó]\b/i,
@@ -334,8 +332,8 @@ const TYPE_DEFINITIONS: TypeDefinition[] = [
       /\bpendant\b/i,
     ],
     keywords: [
-      'ekszer', 'jewelry', 'jewellery', 'ring', 'gyuru', 'nyaklanc',
-      'necklace', 'karkoto', 'bracelet', 'fulbevalo', 'earring', 'earrings',
+      'ekszer', 'jewelry', 'jewellery', 'ring', 'gyuru', 'karkoto', 'bracelet',
+      'fulbevalo', 'earring', 'earrings',
       'medal', 'pendant', 'charm',
     ],
     priority: 5,
@@ -369,10 +367,15 @@ const TYPE_DEFINITIONS: TypeDefinition[] = [
     patterns: [
       /\bkieg[eé]sz[ií]t[oő]\b/i,
       /\baccessor(?:y|ies)\b/i,
+      /\bnyakl[aá]nc\b/i,
+      /\bnecklace\b/i,
+      /\bl[aá]nc\b/i,
       /\b[oö]v\b/i,
       /\bbelt\b/i,
       /\bs[aá]l\b/i,
       /\bscarf\b/i,
+      /\bkulcstart[oó]\b/i,
+      /\bkeychain\b/i,
       /\bkeszty[uű]\b/i,
       /\bgloves?\b/i,
       /\bzokni\b/i,
@@ -384,7 +387,8 @@ const TYPE_DEFINITIONS: TypeDefinition[] = [
       /\bp[eé]nzt[aá]rc[aá]\b/i,
     ],
     keywords: [
-      'kiegeszito', 'accessory', 'accessories', 'ov', 'belt', 'sal', 'scarf',
+      'kiegeszito', 'accessory', 'accessories', 'nyaklanc', 'necklace', 'lanc',
+      'kulcstarto', 'keychain', 'ov', 'belt', 'sal', 'scarf',
       'kesztyu', 'glove', 'gloves', 'zokni', 'sock', 'socks', 'harisnya',
       'nyakkendo', 'tie', 'wallet', 'penztarca', 'watch', 'ora',
     ],

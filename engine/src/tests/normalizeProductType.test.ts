@@ -144,7 +144,6 @@ const TASKA_TESTS: TestCase[] = [
 const EKSZER_TESTS: TestCase[] = [
   { input: 'ékszer', expected: 'Ékszer' },
   { input: 'gyűrű', expected: 'Ékszer' },
-  { input: 'nyaklánc', expected: 'Ékszer' },
   { input: 'bracelet', expected: 'Ékszer' },
   { input: 'earring', expected: 'Ékszer' },
 ];
@@ -160,6 +159,8 @@ const KIEGESZITO_TESTS: TestCase[] = [
   { input: 'öv', expected: 'Kiegészítő' },
   { input: 'belt', expected: 'Kiegészítő' },
   { input: 'sál', expected: 'Kiegészítő' },
+  { input: 'nyaklánc', expected: 'Kiegészítő' },
+  { input: 'kulcstartó', expected: 'Kiegészítő' },
   { input: 'zokni', expected: 'Kiegészítő' },
   { input: 'nyakkendő', expected: 'Kiegészítő' },
 ];

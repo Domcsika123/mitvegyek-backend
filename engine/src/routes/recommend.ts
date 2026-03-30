@@ -228,7 +228,6 @@ const TYPE_FILTER_MAP: Record<string, string[]> = {
   "sneaker": ["sneaker"],
   "bakancs": ["boot"],
   "táska": ["bag", "backpack", "tote", "pouch"],
-  "hátizsák": ["backpack"],
   "zokni": ["socks", "sock"],
   "sál": ["scarf"],
   "öv": ["belt"],
@@ -240,7 +239,7 @@ const TYPE_FILTER_MAP: Record<string, string[]> = {
   "fürdőruha": ["swimwear", "swim", "bikini"],
   "telefontok": ["phone case", "iphone case", "mobile phone case", "mobile phone cases"],
   "kiegészítő": ["keychain", "necklace", "chain", "scarf", "shawl", "sock", "belt", "jewelry", "bracelet", "ring", "earring"],
-  "ékszer": ["jewelry", "necklace", "ring", "bracelet", "earring"],
+  "ékszer": ["jewelry", "ring", "bracelet", "earring"],
 };
 
 // Canonical Hungarian color → English synonyms in product text

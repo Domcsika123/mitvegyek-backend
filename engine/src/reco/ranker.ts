@@ -1007,7 +1007,7 @@ export function formatProductBlurb(product: Product): string {
     sweater: "Pulóver",
     crewneck: "Pulóver",
     bag: "Táska",
-    backpack: "Hátizsák",
+    backpack: "Táska",
   };
   
   const typeNorm = normalizeText(typeRaw);

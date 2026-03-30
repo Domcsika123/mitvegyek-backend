@@ -77,10 +77,9 @@ const TYPE_GROUPS: { id: string; synonyms: string[] }[] = [
   { id: "zokni", synonyms: ["zokni","socks","sock","bokazokni","térd zokni","térdzokni","kompressziós zokni","sportzokni","zokni szett","harisnya","harisnyanadrág","tights"] },
   { id: "fehernemu", synonyms: ["fehérnemű","fehernemu","underwear","alsónemű","alsonemu","boxer","alsónadrág","bugyi","tanga","melltartó","melltarto","bra","sportmelltartó","briefs"] },
   { id: "sapka", synonyms: ["sapka","kalap","hat","cap","beanie","baseball cap","bucket hat","bucket","trucker","snapback"] },
-  { id: "sal", synonyms: ["sál","sal","scarf","kendő","kendo","nyakkendő","nyakkendo"] },
   { id: "sportruha", synonyms: ["sportruha","activewear","sport","fitness","edzőruha","edzoruha","futóruha","futoruha","yoga","tréningruha","treningruha"] },
-  { id: "ekszer", synonyms: ["ékszer","ekszer","jewelry","jewellery","nyaklánc","nyaklanc","karkötő","karkoto","gyűrű","gyuru","fülbevaló","fulbevalo","piercing","lánc","lanc","medál","medal","bross"] },
-  { id: "kiegeszito", synonyms: ["kiegészítő","kiegeszito","accessory","accessories","öv","ov","belt","napszemüveg","napszemuveg","sunglasses","pénztárca","penztarca","wallet","kulcstartó","kulcstarto"] },
+  { id: "ekszer", synonyms: ["ékszer","ekszer","jewelry","jewellery","karkötő","karkoto","gyűrű","gyuru","fülbevaló","fulbevalo","piercing","medál","medal","bross"] },
+  { id: "kiegeszito", synonyms: ["kiegészítő","kiegeszito","accessory","accessories","nyaklánc","nyaklanc","necklace","lánc","lanc","sál","sal","scarf","kendő","kendo","nyakkendő","nyakkendo","öv","ov","belt","napszemüveg","napszemuveg","sunglasses","pénztárca","penztarca","wallet","kulcstartó","kulcstarto","keychain"] },
 ];
 
 /** Resolve a text token to a color group ID. Strict word-level match only. */
@@ -782,10 +781,9 @@ function evaluateTypeGroup(
     ing: ["polo"],
     sportruha: ["melegito", "furdoruha"],
     furdoruha: ["sportruha"],
-    sapka: ["sal", "kiegeszito"],
-    sal: ["sapka", "kiegeszito"],
-    ekszer: ["sapka", "sal", "kiegeszito"],
-    kiegeszito: ["sapka", "sal", "ekszer", "taska"],
+    sapka: ["kiegeszito"],
+    ekszer: ["sapka", "kiegeszito"],
+    kiegeszito: ["sapka", "ekszer", "taska"],
   };
   if (related[userGroup]?.includes(productGroup)) {
     return { matched: true, score: 0.7, reason: `related type: ${productGroup} ≈ ${userGroup}` };
