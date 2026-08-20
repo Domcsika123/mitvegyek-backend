@@ -4,6 +4,8 @@ import { authenticatePartner } from "../services/partnerService";
 import { getStatsForSite } from "../services/statsService";
 import { createFeedback, listFeedbackForSite } from "../services/feedbackService";
 import { createPartnerToken, partnerAuth } from "../middleware/partnerAuth";
+import { getProductsForSite } from "../services/productService";
+import { getAllCustomTags, setProductTags } from "../services/productTagsService";
 
 const router = Router();
 
@@ -79,6 +81,82 @@ router.get("/feedback", partnerAuth, (req, res) => {
   } catch (err) {
     console.error("Hiba a /api/partner/feedback (GET) hívásban:", err);
     return res.status(500).json({ error: "Nem sikerült lekérni a bejelentéseket." });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// TERMÉK TAG KEZELÉS
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/partner/products?search=&page=1&pageSize=20
+ * Visszaadja a webshop termékeit lapozva, a custom tagekkel együtt.
+ */
+router.get("/products", partnerAuth, (req, res) => {
+  try {
+    const siteKey = String((req as any).partnerSiteKey || "").trim();
+    const search = String(req.query.search || "").trim().toLowerCase();
+    const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
+    const pageSize = Math.min(50, Math.max(1, parseInt(String(req.query.pageSize || "20"), 10) || 20));
+
+    const allProducts = getProductsForSite(siteKey);
+    const customTags = getAllCustomTags(siteKey);
+
+    let filtered = allProducts;
+    if (search) {
+      filtered = allProducts.filter((p) => {
+        const text = `${p.name || ""} ${(p as any).tags || ""} ${p.category || ""}`.toLowerCase();
+        return text.includes(search);
+      });
+    }
+
+    const total = filtered.length;
+    const offset = (page - 1) * pageSize;
+    const paged = filtered.slice(offset, offset + pageSize);
+
+    const items = paged.map((p) => ({
+      product_id: (p as any).product_id,
+      name: p.name,
+      category: p.category,
+      price: (p as any).price,
+      price_currency: (p as any).price_currency,
+      image_url: (p as any).image_url,
+      tags: (p as any).tags || "",
+      custom_tags: customTags[(p as any).product_id] || [],
+    }));
+
+    return res.json({ ok: true, total, page, pageSize, items });
+  } catch (err) {
+    console.error("Hiba a /api/partner/products hívásban:", err);
+    return res.status(500).json({ error: "Nem sikerült lekérni a termékeket." });
+  }
+});
+
+/**
+ * POST /api/partner/products/:product_id/tags
+ * body: { tags: string[] }   OR   { tags: "tag1, tag2, tag3" }
+ * Beállítja egy termék custom AI tagjeit.
+ */
+router.post("/products/:product_id/tags", partnerAuth, (req, res) => {
+  try {
+    const siteKey = String((req as any).partnerSiteKey || "").trim();
+    const productId = String(req.params.product_id || "");
+    const rawTags = (req.body || {}).tags;
+
+    let tags: string[];
+    if (Array.isArray(rawTags)) {
+      tags = rawTags.map(String);
+    } else if (typeof rawTags === "string") {
+      tags = rawTags.split(",").map((t) => t.trim()).filter(Boolean);
+    } else {
+      tags = [];
+    }
+
+    setProductTags(siteKey, productId, tags);
+    return res.json({ ok: true, product_id: productId, custom_tags: tags });
+  } catch (err) {
+    console.error("Hiba a /api/partner/products/:id/tags hívásban:", err);
+    return res.status(500).json({ error: "Nem sikerült menteni a tageket." });
   }
 });
 

@@ -687,6 +687,7 @@
       "  font-size:15px;font-weight:900;cursor:pointer;" +
       "  transition:all 0.3s ease;box-shadow:0 8px 24px rgba(99,102,241,0.4);" +
       "}" +
+      ".mv-widget-submit-btn:disabled{opacity:0.65;cursor:not-allowed;box-shadow:none;}" +
       ".mv-widget-reset-btn{" +
       "  width:100%;padding:11px;background:rgba(255,255,255,0.12);" +
       "  border:2px solid rgba(255,255,255,0.2);border-radius:12px;" +
@@ -1506,15 +1507,14 @@
   function scrollToResultsSectionTop() {
     var container = document.getElementById("mv-results");
     if (!container) return;
-    // Először a notice bannerre görgessünk (ha van), mert az a legfontosabb info
-    var notice = container.querySelector(".mv-widget-results-notice");
-    if (notice) {
-      scrollPanelBodyToElement(notice, "smooth");
-      return;
-    }
-    var firstTitle = container.querySelector(".mv-widget-results-section-title");
-    if (!firstTitle) return;
-    scrollPanelBodyToElement(firstTitle, "smooth");
+    var bodyEl = getPanelBodyEl();
+    if (!bodyEl) return;
+    var bodyRect = bodyEl.getBoundingClientRect();
+    var contRect = container.getBoundingClientRect();
+    // Scroll so the results container starts ~80px from body top — leaves the last
+    // form field (e.g. budget) visible above, making it easy to modify & re-submit.
+    var scrollTarget = (contRect.top - bodyRect.top) + bodyEl.scrollTop - 80;
+    bodyEl.scrollTo({ top: Math.max(0, scrollTarget), behavior: "smooth" });
   }
 
   /* ===================== FORM LOGIC ===================== */
@@ -1637,7 +1637,11 @@
       return;
     }
 
-    // Loading state
+    // Loading state — disable submit button to prevent double-click
+    var _submitBtn = document.getElementById("mv-submit-btn");
+    var _origBtnText = _submitBtn ? _submitBtn.textContent : "";
+    if (_submitBtn) { _submitBtn.disabled = true; _submitBtn.textContent = copy.loadingText || "Betöltés…"; }
+
     statusEl.innerHTML = '<span class="mv-widget-spinner"></span>' + escapeHtml(copy.loadingText);
     statusEl.classList.remove("mv-widget-status-error", "mv-widget-status-ok");
     statusEl.classList.add("mv-widget-status-loading");
@@ -1667,6 +1671,7 @@
         statusEl.classList.remove("mv-widget-status-ok", "mv-widget-status-loading");
         statusEl.classList.add("mv-widget-status-error");
         statusEl.style.display = "block";
+        if (_submitBtn) { _submitBtn.disabled = false; _submitBtn.textContent = _origBtnText; }
         return;
       }
 
@@ -1674,6 +1679,8 @@
       statusEl.style.display = "none";
 
       renderResultsTwoSections(resultsEl, items, alsoItems, notice);
+      // After loading results: scroll so the last form field is still visible above
+      // the results — user can immediately modify & re-submit without any extra scrolling.
       setTimeout(function () { scrollToResultsSectionTop(); }, 80);
     } catch (err) {
       console.error(err);
@@ -1681,6 +1688,9 @@
       statusEl.classList.remove("mv-widget-status-ok", "mv-widget-status-loading");
       statusEl.classList.add("mv-widget-status-error");
       statusEl.style.display = "block";
+    } finally {
+      // Always re-enable submit button after the fetch completes or errors
+      if (_submitBtn) { _submitBtn.disabled = false; _submitBtn.textContent = _origBtnText; }
     }
   }
 

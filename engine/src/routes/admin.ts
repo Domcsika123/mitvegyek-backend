@@ -6,7 +6,7 @@ import { Product } from "../models/Product";
 import { embedProductsInBatches } from "../ai/embeddings";
 import { generateProductDescriptions } from "../ai/generateDescriptions";
 import { extractCatalogTypes } from "../ai/extractCatalogTypes";
-import { describeImage } from "../ai/visual";
+// import { describeImage } from "../ai/visual"; // removed: Phase 1 sequential vision eliminated
 import { listAllFeedback, updateFeedback } from "../services/feedbackService";
 import {
   createPartner,
@@ -128,42 +128,26 @@ router.post("/import-products", async (req, res) => {
 
   // Create progress job for polling
   const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const job: ImportJob = { status: "running", phase: "Vizuális elemzés...", percent: 0, total: products.length };
+  const job: ImportJob = { status: "running", phase: "Embedding generálás...", percent: 0, total: products.length };
   importJobs.set(jobId, job);
 
   // Check if AI fields are already present (pre-generated import)
   const hasPreGenerated = products.every((p: any) => p.ai_description);
   if (hasPreGenerated) {
-    console.log(`[admin] All ${products.length} products have pre-generated ai_description — skipping visual+description phases`);
+    console.log(`[admin] All ${products.length} products have pre-generated ai_description — skipping description phase`);
   }
 
   try {
-    // Phase 1: Visual analysis (0-20%) — skip if pre-generated
-    let productsWithVisuals = products;
-    if (!hasPreGenerated) {
-      job.phase = "Vizuális elemzés...";
-      productsWithVisuals = [];
-      for (let i = 0; i < products.length; i++) {
-        const product = products[i];
-        if (product.image_url) {
-          const visualTags = await describeImage(product.image_url);
-          if (visualTags) product.visual_tags = visualTags;
-        }
-        productsWithVisuals.push(product);
-        job.percent = Math.round((i + 1) / products.length * 20);
-      }
-    } else {
-      job.percent = 20;
-    }
-
-    // Phase 2: Embeddings (20-60%)
+    // Phase 1: Embeddings (0-60%)
+    // NOTE: Visual analysis (describeImage) removed — it was sequential (1 API call per product)
+    // and redundant: generateProductDescriptions already does vision analysis in parallel batches.
     job.phase = "Embedding generálás...";
-    job.percent = 20;
+    job.percent = 0;
     const batchSize = Number(process.env.EMBED_BATCH_SIZE || 64) || 64;
-    let embedded = productsWithVisuals;
+    let embedded = products;
     try {
-      embedded = await embedProductsInBatches(productsWithVisuals, batchSize, (done, total) => {
-        job.percent = 20 + Math.round(done / total * 40);
+      embedded = await embedProductsInBatches(products, batchSize, (done, total) => {
+        job.percent = Math.round(done / total * 60);
       });
     } catch (e) {
       console.error("Embedding generálási hiba importkor:", e);
@@ -172,7 +156,8 @@ router.post("/import-products", async (req, res) => {
       return res.status(500).json({ error: "Embedding generálás sikertelen." });
     }
 
-    // Phase 3: AI descriptions + fashion tags (60-90%) — skip if pre-generated
+    // Phase 2: AI descriptions + fashion tags (60-90%) — skip if pre-generated
+    // generateProductDescriptions internally uses vision (parallel batches) for products with images.
     let withDescriptions = embedded;
     if (!hasPreGenerated) {
       job.phase = "AI leírások generálása...";

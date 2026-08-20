@@ -520,6 +520,7 @@
     <div class="mv-tabs">
       <button class="mv-tab-btn active" id="tabBtnStats" type="button">Statisztika</button>
       <button class="mv-tab-btn" id="tabBtnFeedback" type="button">Bejelentések</button>
+      <button class="mv-tab-btn" id="tabBtnProducts" type="button">Termékek (AI tagek)</button>
     </div>
 
     <!-- TAB: STATS -->
@@ -603,6 +604,60 @@
       </div>
     </div>
 
+    <!-- TAB: PRODUCTS / AI TAG MANAGEMENT -->
+    <div class="mv-tab-panel" id="tabPanelProducts">
+      <div class="mv-card">
+        <h2 style="margin:0 0 4px 0;">Termék AI tagek</h2>
+        <p class="mv-small" style="margin-top:0;">
+          Adj hozzá kulcsszavakat egy termékhez – az AI ezek alapján fogja ajánlani a látogatóknak.<br>
+          <b>Pl.:</b> egy téli kabátra: <code>téli, vastag, meleg, outdoor</code>
+        </p>
+
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+          <input id="prodSearch" placeholder="Keresés termék neve alapján…"
+            style="max-width:340px;display:inline-block;width:auto;flex:1;" />
+          <button class="mv-btn mv-btn-primary" id="btnProdSearch" type="button">Keresés</button>
+          <span class="mv-status" id="prodStatus"></span>
+        </div>
+
+        <div class="mv-table-scroll">
+          <table id="prodTable">
+            <thead>
+              <tr>
+                <th style="width:40%;">Termék</th>
+                <th style="width:20%;">Kategória</th>
+                <th>Jelenlegi AI tagek</th>
+                <th style="width:100px;"></th>
+              </tr>
+            </thead>
+            <tbody id="prodTbody">
+              <tr><td colspan="4" style="color:#9ca3af;text-align:center;padding:20px;">
+                Írj be egy keresési kifejezést, vagy kattints a Keresés gombra az összes termékhez.
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="mv-btn mv-btn-secondary" id="btnProdPrev" type="button" disabled>← Előző</button>
+          <span id="prodPager" style="font-size:13px;color:#6b7280;"></span>
+          <button class="mv-btn mv-btn-secondary" id="btnProdNext" type="button" disabled>Következő →</button>
+        </div>
+
+        <!-- inline tag szerkesztő -->
+        <div id="tagEditorBox" style="display:none;margin-top:16px;border:1px solid #e5e7eb;border-radius:10px;padding:14px;background:#f9fafb;">
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px;" id="tagEditorTitle"></div>
+          <label>AI tagek (vesszővel elválasztva)</label>
+          <input id="tagEditorInput" placeholder="pl. téli, meleg, sport, oversized" />
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="mv-btn mv-btn-primary" id="btnTagSave" type="button">Mentés</button>
+            <button class="mv-btn mv-btn-secondary" id="btnTagCancel" type="button">Mégse</button>
+          </div>
+          <div class="mv-status" id="tagEditorStatus"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- TAB: FEEDBACK -->
     <div class="mv-tab-panel" id="tabPanelFeedback">
       <div class="mv-card" id="feedbackCard">
@@ -659,15 +714,18 @@
     function initTabs(){
       const btnStats = document.getElementById("tabBtnStats");
       const btnFb = document.getElementById("tabBtnFeedback");
+      const btnProducts = document.getElementById("tabBtnProducts");
       const pStats = document.getElementById("tabPanelStats");
       const pFb = document.getElementById("tabPanelFeedback");
+      const pProducts = document.getElementById("tabPanelProducts");
 
       function show(which){
-        const isStats = which === "stats";
-        btnStats.classList.toggle("active", isStats);
-        btnFb.classList.toggle("active", !isStats);
-        pStats.classList.toggle("active", isStats);
-        pFb.classList.toggle("active", !isStats);
+        btnStats.classList.toggle("active", which === "stats");
+        btnFb.classList.toggle("active", which === "fb");
+        btnProducts.classList.toggle("active", which === "products");
+        pStats.classList.toggle("active", which === "stats");
+        pFb.classList.toggle("active", which === "fb");
+        pProducts.classList.toggle("active", which === "products");
       }
 
       btnStats.addEventListener("click", async (e)=>{
@@ -679,6 +737,11 @@
         e.preventDefault();
         show("fb");
         await loadMyFeedback();
+      });
+      btnProducts.addEventListener("click", async (e)=>{
+        e.preventDefault();
+        show("products");
+        await loadProducts(1);
       });
     }
 
@@ -835,6 +898,118 @@
         if(btn) btn.disabled = false;
       }
     });
+
+    // ─── TERMÉK TAG KEZELŐ ───────────────────────────────────────────
+    let prodPage = 1;
+    let prodTotal = 0;
+    const PROD_PAGE_SIZE = 20;
+    let editingProductId = null;
+
+    async function loadProducts(page) {
+      prodPage = page || 1;
+      const search = (document.getElementById("prodSearch").value || "").trim();
+      const prodStatus = document.getElementById("prodStatus");
+      setStatus(prodStatus, "Betöltés...", null);
+
+      try {
+        const qs = new URLSearchParams({ page: String(prodPage), pageSize: String(PROD_PAGE_SIZE) });
+        if (search) qs.set("search", search);
+        const res = await partnerFetch("/api/partner/products?" + qs.toString());
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Hiba a termékek betöltésekor.");
+
+        prodTotal = data.total || 0;
+        const items = data.items || [];
+        renderProductTable(items);
+        setStatus(prodStatus, prodTotal === 0 ? "Nincs találat." : "", null);
+
+        // pager
+        const totalPages = Math.ceil(prodTotal / PROD_PAGE_SIZE);
+        document.getElementById("prodPager").textContent =
+          prodTotal > 0 ? `${prodPage} / ${totalPages} oldal  (${prodTotal} termék)` : "";
+        document.getElementById("btnProdPrev").disabled = prodPage <= 1;
+        document.getElementById("btnProdNext").disabled = prodPage >= totalPages;
+      } catch (e) {
+        setStatus(document.getElementById("prodStatus"), e.message || "Hiba", false);
+      }
+    }
+
+    function renderProductTable(items) {
+      const tbody = document.getElementById("prodTbody");
+      if (items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="color:#9ca3af;text-align:center;padding:20px;">Nincs találat.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = items.map((p) => {
+        const customTagsDisplay = (p.custom_tags || []).length > 0
+          ? escapeHtml((p.custom_tags || []).join(", "))
+          : '<span style="color:#9ca3af;">–</span>';
+        return `<tr>
+          <td>
+            <div style="font-weight:600;font-size:13px;">${escapeHtml(p.name || "")}</div>
+            <div style="font-size:11px;color:#6b7280;">${escapeHtml(p.product_id || "")}</div>
+          </td>
+          <td style="font-size:12px;color:#4b5563;">${escapeHtml((p.category || "").split(">").pop()?.trim() || "")}</td>
+          <td style="font-size:12px;">${customTagsDisplay}</td>
+          <td>
+            <button class="mv-btn mv-btn-secondary" style="padding:4px 10px;font-size:12px;"
+              onclick="openTagEditor(${JSON.stringify(p.product_id)}, ${JSON.stringify(p.name)}, ${JSON.stringify((p.custom_tags||[]).join(", "))})">
+              Szerkesztés
+            </button>
+          </td>
+        </tr>`;
+      }).join("");
+    }
+
+    function openTagEditor(productId, productName, currentTags) {
+      editingProductId = productId;
+      document.getElementById("tagEditorTitle").textContent = productName || productId;
+      document.getElementById("tagEditorInput").value = currentTags || "";
+      document.getElementById("tagEditorBox").style.display = "block";
+      document.getElementById("tagEditorStatus").textContent = "";
+      document.getElementById("tagEditorInput").focus();
+      document.getElementById("tagEditorBox").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    document.getElementById("btnTagCancel").addEventListener("click", () => {
+      document.getElementById("tagEditorBox").style.display = "none";
+      editingProductId = null;
+    });
+
+    document.getElementById("btnTagSave").addEventListener("click", async () => {
+      if (!editingProductId) return;
+      const tagStr = document.getElementById("tagEditorInput").value || "";
+      const tags = tagStr.split(",").map(t => t.trim()).filter(Boolean);
+      const editorStatus = document.getElementById("tagEditorStatus");
+      setStatus(editorStatus, "Mentés...", null);
+
+      try {
+        const res = await partnerFetch(`/api/partner/products/${encodeURIComponent(editingProductId)}/tags`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tags }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Hiba a mentéskor.");
+
+        setStatus(editorStatus, "Mentve ✔", true);
+        setTimeout(() => {
+          document.getElementById("tagEditorBox").style.display = "none";
+          editingProductId = null;
+          loadProducts(prodPage); // frissítjük a táblát
+        }, 800);
+      } catch (e) {
+        setStatus(editorStatus, e.message || "Hiba", false);
+      }
+    });
+
+    document.getElementById("btnProdSearch").addEventListener("click", () => loadProducts(1));
+    document.getElementById("prodSearch").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") loadProducts(1);
+    });
+    document.getElementById("btnProdPrev").addEventListener("click", () => loadProducts(prodPage - 1));
+    document.getElementById("btnProdNext").addEventListener("click", () => loadProducts(prodPage + 1));
+    // ─────────────────────────────────────────────────────────────────
 
     window.addEventListener("DOMContentLoaded", async ()=>{
       initTabs();
