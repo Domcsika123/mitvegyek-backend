@@ -19,6 +19,8 @@ import { dedupeByBaseProduct } from "../ai/queryUtils";
 import { Product, FashionTags } from "../models/Product";
 import { detectColors } from "../search/colors";
 import { detectAttributes, applyPositiveAttributeFilter, getAttributeDisplayNames, AttributeDef } from "../search/attributes";
+import { mergeCustomTags } from "../services/productTagsService";
+import { isKnownOutOfStock, warmStock } from "../services/stockService";
 
 /* ============================================================
    FASHION TAGS SCORING
@@ -449,6 +451,72 @@ function applyHardFilters(
 }
 
 /* ============================================================
+   DIVERSIFICATION HELPER
+   When no explicit type filter: ensure diverse product categories
+   and add slight randomization so results vary across sessions.
+   ============================================================ */
+
+/**
+ * Picks `maxItems` products from `candidates` with category diversity.
+ * - Max `maxPerCategory` products per top-level Shopify category segment
+ * - Draws from an expanded pool (top 28) instead of just top 8
+ * - Adds small Fisher-Yates shuffle within same-score "tiers" for variety
+ */
+function diversifyAndRandomize(
+  candidates: Product[],
+  maxItems: number,
+  noTypeFilter: boolean
+): Product[] {
+  if (!noTypeFilter || candidates.length <= maxItems) return candidates.slice(0, maxItems);
+
+  // Work from a larger pool (top 28 after dedup/filtering)
+  const POOL_SIZE = Math.min(28, candidates.length);
+  const pool = candidates.slice(0, POOL_SIZE);
+
+  // Light shuffle within each "tier" of ~4 to introduce variety across sessions
+  // This means positions 0-3 are shuffled among themselves, 4-7 among themselves, etc.
+  const TIER_SIZE = 4;
+  const shuffled: Product[] = [];
+  for (let i = 0; i < pool.length; i += TIER_SIZE) {
+    const tier = pool.slice(i, i + TIER_SIZE);
+    // Fisher-Yates on the tier
+    for (let j = tier.length - 1; j > 0; j--) {
+      const k = Math.floor(Math.random() * (j + 1));
+      [tier[j], tier[k]] = [tier[k], tier[j]];
+    }
+    shuffled.push(...tier);
+  }
+
+  // Category diversity: max 2 per top-level category
+  const MAX_PER_CAT = 2;
+  const catCount = new Map<string, number>();
+  const result: Product[] = [];
+
+  for (const p of shuffled) {
+    if (result.length >= maxItems) break;
+    const topCat = ((p.category || "").split(">")[0].trim() || "other").toLowerCase();
+    const count = catCount.get(topCat) || 0;
+    if (count < MAX_PER_CAT) {
+      result.push(p);
+      catCount.set(topCat, count + 1);
+    }
+  }
+
+  // If fewer than maxItems found (highly concentrated catalog), fill from pool without limit
+  if (result.length < maxItems) {
+    const inResult = new Set(result.map((p) => String((p as any).product_id || p.name)));
+    for (const p of shuffled) {
+      if (result.length >= maxItems) break;
+      if (!inResult.has(String((p as any).product_id || p.name))) {
+        result.push(p);
+      }
+    }
+  }
+
+  return result;
+}
+
+/* ============================================================
    HELPERS
    ============================================================ */
 
@@ -844,9 +912,14 @@ router.post("/recommend", async (req, res) => {
     }
 
     // Filter out products with no price (e.g. "Mystery gift" with price=0)
+    // ✅ + készlet szűrés: amit a stockService biztosan elfogyottnak tud (cache-elt,
+    // schema.org JSON-LD alapú élő ellenőrzés a product_url-ról), azt nem ajánljuk.
+    // Ismeretlen/nem ellenőrzött státusz esetén NEM szűrünk ki (fail-open).
     const allProductsFiltered = allProducts.filter((p) => {
       const price = (p as any).price;
-      return typeof price === "number" && price > 0;
+      if (!(typeof price === "number" && price > 0)) return false;
+      if (isKnownOutOfStock((p as any).product_url)) return false;
+      return true;
     });
 
     // ================================================================
@@ -1064,10 +1137,11 @@ router.post("/recommend", async (req, res) => {
         return ACCESSORY_CATS.test(cat);
       };
 
+      const noTypeFilter = querySignals.types.length === 0;
+
       if (hasFashionQuery && primaryFiltered.length > MAX_ITEMS) {
         // Score ALL filtered products by fashion_tags match, pick best 8
         // When no explicit type filter: deprioritize accessories (socks, belts, etc.)
-        const noTypeFilter = querySignals.types.length === 0;
         const fashionScored = primaryFiltered.map((p) => ({
           product: p,
           fashionScore: scoreFashionTags((p as any).fashion_tags, fashionQuery),
@@ -1080,11 +1154,16 @@ router.post("/recommend", async (req, res) => {
           return b.fashionScore - a.fashionScore;
         });
 
-        primaryItems = fashionScored.slice(0, MAX_ITEMS).map((s) => s.product);
-        instantAlso = fashionScored.slice(MAX_ITEMS, MAX_ITEMS + 6).map((s) => s.product);
-        console.log(`[recommend] INSTANT fashion_tags: top ${primaryItems.length} from ${primaryFiltered.length} (query: ${JSON.stringify(fashionQuery)})`);
+        // Diversify: when no type filter, ensure multiple categories represented
+        const fashionPool = fashionScored.map((s) => s.product);
+        primaryItems = diversifyAndRandomize(fashionPool, MAX_ITEMS, noTypeFilter);
+        instantAlso = fashionPool.slice(MAX_ITEMS, MAX_ITEMS + 6).filter(
+          (p) => !primaryItems.includes(p)
+        );
+        console.log(`[recommend] INSTANT fashion_tags+diversity: top ${primaryItems.length} from ${primaryFiltered.length} (query: ${JSON.stringify(fashionQuery)})`);
       } else {
-        primaryItems = primaryFiltered.slice(0, MAX_ITEMS);
+        // No fashion query: diversify & randomize when no explicit type filter
+        primaryItems = diversifyAndRandomize(primaryFiltered, MAX_ITEMS, noTypeFilter);
       }
 
       // ── Smart free_text matching ──
@@ -1122,7 +1201,7 @@ router.post("/recommend", async (req, res) => {
       // ── Free text token matching (for brand/collection/specific name searches) ──
       if (freeTextTokens.length > 0 && !hasFashionQuery) {
         const searchableText = (p: Product) =>
-          normalizeForMatch(`${p.name || ""} ${(p as any).tags || ""} ${(p as any).ai_description || ""} ${p.description || ""}`);
+          normalizeForMatch(`${p.name || ""} ${mergeCustomTags(siteKey, p)} ${(p as any).ai_description || ""} ${p.description || ""}`);
 
         const scored = primaryItems.map((p) => {
           const text = searchableText(p);
@@ -1247,6 +1326,12 @@ router.post("/recommend", async (req, res) => {
     const items = rerankResult.items.map(mapProductResponse);
     const alsoItems = rerankResult.also_items.map(mapProductResponse);
 
+    // ✅ Készlet-cache melegítése: csak a ténylegesen megjelenő termékekre, nem blokkolja
+    // a választ — a KÖVETKEZŐ ajánláskor lesz már friss (max 20 percig cache-elt) adat.
+    for (const it of [...rerankResult.items, ...rerankResult.also_items]) {
+      warmStock((it.product as any)?.product_url);
+    }
+
     // Notice: shown when no exact match or few matches
     let notice: string | null = null;
     if (colorFilterSkipped) {
@@ -1299,9 +1384,10 @@ router.post("/recommend", async (req, res) => {
     try {
       const allProducts = getProductsForSite("default");
       if (allProducts && allProducts.length > 0) {
-        const fallbackItems = allProducts.slice(0, 6).map((p) =>
-          makeAlsoItem(p)
-        );
+        const fallbackItems = allProducts
+          .filter((p) => !isKnownOutOfStock((p as any).product_url))
+          .slice(0, 6)
+          .map((p) => makeAlsoItem(p));
         return res.json({
           items: fallbackItems,
           also_items: [],
